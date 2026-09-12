@@ -6,12 +6,14 @@
 
 ## 快速开始
 
-需要 **Node.js 22.12+、npm，以及近期版本的 Chrome 或 Edge**。在仓库根目录执行：
+需要 **Node.js 22.12+、npm，以及近期版本的 Chrome 或 Edge**。首次安装时，在仓库根目录执行：
 
 ```sh
 npm ci
 npm run dev
 ```
+
+依赖安装完成后，平时启动只需 `npm run dev`。重新执行 `npm ci` 前，先在运行本项目的终端按 `Ctrl+C` 停止开发服务器和测试进程；`npm ci` 会删除并重装依赖，Windows 上运行中的 Vite 可能占用原生模块，导致 `EPERM` 和依赖安装中断。
 
 打开 **[http://localhost:5180](http://localhost:5180)**。前端端口为 5180，Socket.IO / HTTP 服务器为 3001；安装时会自动复制本地模型所需的 WASM 运行库。
 
@@ -115,6 +117,7 @@ npm run test:camera
 
 常见问题：
 
+- **Windows 安装报 `EPERM`，随后提示找不到 `tsc`**：先停止本项目的所有开发／测试进程，再在仓库根目录重新执行 `npm ci`，成功后运行 `npm run dev`。不要用全局安装 TypeScript 代替修复项目依赖。
 - **连接成功但找不到房间**：检查所有前端是否连接同一台服务器，以及服务器是否重启过。
 - **无法开启摄像头**：使用 localhost 或 HTTPS，允许权限并关闭其他占用摄像头的程序。
 - **模型资源缺失**：重新运行 `npm ci` 和 `npm run model:check`；不要混用两种 MediaPipe 版本的 WASM。
