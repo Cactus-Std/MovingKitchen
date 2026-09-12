@@ -141,12 +141,13 @@ button { font: inherit; }
 
 .food-card { min-width: 0; min-height: 0; border: 3px solid transparent; border-radius: 16px; background: #fff8e926; display: grid; place-items: center; cursor: default; position: relative; transition: .15s; }
 .food-card:hover { border-color: #2fbb69; background: #d9ffe25c; }
-.food-card .emoji { font-size: clamp(36px, 4vw, 72px); }
-.food-card .label { align-self: end; margin-bottom: 5px; padding: 3px 9px; border-radius: 10px; background: #fffdf0d9; font-weight: 800; }
+.food-card .emoji { font-size: clamp(48px, 5vw, 90px); line-height: 1; }
 .hover-ring { position: absolute; width: 84px; height: 84px; border-radius: 50%; pointer-events: none; z-index: 30; transform: translate(-50%, -50%); background: conic-gradient(#31b76a var(--p, 0%), #ffffffb8 0); display: none; }
 .hover-ring::after { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #fff8; }
 
 .hand { position: fixed; z-index: 50; pointer-events: none; transform: translate(-25%, -12%); font-size: 48px; filter: drop-shadow(2px 4px 2px #0005); }
+.held-food { display: block; font-size: clamp(92px, 9vw, 154px); line-height: 1; transform: translate(-36%, -34%); filter: drop-shadow(0 10px 8px #0006); }
+.board-food { display: block; font-size: clamp(120px, 15vw, 250px); line-height: 1; filter: drop-shadow(0 12px 8px #0005); }
 .held-tool { display: block; width: 150px; height: 120px; object-fit: contain; transform: translate(-35%, -30%); }
 .carried-label { position: absolute; top: -8px; left: 38px; min-width: 90px; padding: 5px 8px; background: #fff; border: 2px solid #333; border-radius: 10px; font-size: 14px; }
 .footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; background: #3e3027; color: white; }

@@ -274,7 +274,7 @@ function scanSelectedFace() {
 function take(type) {
   if (state.carried || state.carriedTool) return toast("Your hand is already full");
   state.carried = { type, state: type === "tomato" ? "dirty" : "raw", cleanliness: 0, cut: 0 };
-  save(); render(); toast(`Picked up ${FOOD[type].label}`);
+  save(); render(); toast("Ingredient picked up");
 }
 
 function takeOrReturnTool(type) {
@@ -291,14 +291,14 @@ function takeOrReturnTool(type) {
 function handHtml() {
   const item = state.carried;
   const tool = state.carriedTool ? TOOLS[state.carriedTool] : null;
-  return `<div class="hand" style="left:${mouse.x}px;top:${mouse.y}px">${tool ? `<img class="held-tool" src="${tool.image}" alt="${tool.label}">` : item ? FOOD[item.type].emoji : "🖐️"}${item ? `<span class="carried-label">${FOOD[item.type].label} · ${item.state}</span>` : tool ? `<span class="carried-label">${tool.label}</span>` : ""}</div>`;
+  return `<div class="hand" style="left:${mouse.x}px;top:${mouse.y}px">${tool ? `<img class="held-tool" src="${tool.image}" alt="${tool.label}">` : item ? `<span class="held-food" aria-hidden="true">${FOOD[item.type].emoji}</span>` : "🖐️"}${tool ? `<span class="carried-label">${tool.label}</span>` : ""}</div>`;
 }
 
 function shell(content, subtitle) {
   return `<div class="app">
     <header class="topbar"><div class="brand">🍕 Cross-Screen Kitchen</div><nav class="stations">
       ${STATIONS.map(([id, label]) => `<button class="station-tab ${state.station === id ? "active" : ""}" data-station="${id}">${label}</button>`).join("")}
-    </nav><div class="status">Holding: ${state.carried ? FOOD[state.carried.type].label : state.carriedTool ? TOOLS[state.carriedTool].label : "Nothing"}<small>Waste: ${state.waste.total}</small></div></header>
+    </nav><div class="status">Holding: ${state.carried ? "Ingredient" : state.carriedTool ? TOOLS[state.carriedTool].label : "Nothing"}<small>Waste: ${state.waste.total}</small></div></header>
     <main class="stage stage-${state.station} ${state.waterOn ? "water-on" : ""}">${content}</main>
     <footer class="footer"><span>The mouse is your virtual hand · Hold to complete the green ring</span><button id="reset">Reset Demo</button></footer>
     <div class="hover-ring"></div>${handHtml()}<div class="toast"></div>
@@ -306,7 +306,7 @@ function shell(content, subtitle) {
 }
 
 function shelfFoodsMarkup() {
-  return `<div class="shelf-foods">${Object.entries(FOOD).map(([type, f]) => `<div class="food-card" data-food="${type}"><div class="emoji">${f.emoji}</div><div class="label">${f.label}</div></div>`).join("")}</div>`;
+  return `<div class="shelf-foods">${Object.entries(FOOD).map(([type, f]) => `<div class="food-card" data-food="${type}"><div class="emoji" aria-hidden="true">${f.emoji}</div></div>`).join("")}</div>`;
 }
 
 function toolMarkup(type, className) {
@@ -321,12 +321,12 @@ function boardToolsMarkup() {
 
 function boardMarkup(which) {
   const item = state[which];
-  const label = item ? `${FOOD[item.type].emoji} ${FOOD[item.type].label} · ${item.state}` : "Place ingredient here";
-  return `<div class="board ${which === "board2" ? "center" : ""}"><div class="drop-zone ${state.carried ? "ready" : ""}" data-drop="${which}">${label}</div>${item ? `<div class="progress"><div style="width:${item.cut || 0}%"></div></div>` : ""}</div>`;
+  const contents = item ? `<span class="board-food" aria-hidden="true">${FOOD[item.type].emoji}</span>` : "";
+  return `<div class="board ${which === "board2" ? "center" : ""}"><div class="drop-zone ${state.carried ? "ready" : ""}" data-drop="${which}">${contents}</div>${item ? `<div class="progress"><div style="width:${item.cut || 0}%"></div></div>` : ""}</div>`;
 }
 
 function sinkScene() {
-  return shell(`${shelfFoodsMarkup()}<div class="sink"><div class="faucet-hotspot ${state.waterOn ? "on" : ""}" title="Hold here to toggle water"></div><div class="water-stream ${state.waterOn ? "on" : ""}"></div><div class="wash-viewport ${state.carried?.type === "tomato" ? "ready" : ""}" id="wash3d"></div><div class="wash-help">${state.sinkItem ? "Drag the tomato to rinse every side" : "Move the tomato into the sink and complete the green ring"}</div></div><div class="water-meter"><b class="water-value">Water ${Math.round(state.water)}%</b><div class="meter-track"><div class="meter-fill" style="width:${state.water}%"></div></div></div>`, "Pick up ingredients on the left; hold over the faucet or sink to interact");
+  return shell(`${shelfFoodsMarkup()}<div class="sink"><div class="faucet-hotspot ${state.waterOn ? "on" : ""}" title="Hold here to toggle water"></div><div class="water-stream ${state.waterOn ? "on" : ""}"></div><div class="wash-viewport ${state.carried?.type === "tomato" ? "ready" : ""}" id="wash3d"></div><div class="wash-help">${state.sinkItem ? "Drag the ingredient to rinse every side" : "Move the ingredient into the sink and complete the green ring"}</div></div><div class="water-meter"><b class="water-value">Water ${Math.round(state.water)}%</b><div class="meter-track"><div class="meter-fill" style="width:${state.water}%"></div></div></div>`, "Pick up ingredients on the left; hold over the faucet or sink to interact");
 }
 
 function board1Scene() {
@@ -356,7 +356,7 @@ function render() {
 function placeOnBoard(which) {
   if (!state.carried) return;
   if (state[which]) return toast("This cutting board is in use");
-  if (state.carried.type === "tomato" && state.carried.state !== "clean") return toast("Wash the tomato first");
+  if (state.carried.type === "tomato" && state.carried.state !== "clean") return toast("Wash this ingredient first");
   state[which] = state.carried; state.carried = null; save(); render();
 }
 
@@ -371,7 +371,7 @@ function bindBoard(which) {
       state.waste[type] += 1;
       state.carried = null;
       save(); render();
-      toast(`${FOOD[type].label} discarded · Waste ${state.waste.total}`);
+      toast(`Ingredient discarded · Waste ${state.waste.total}`);
     } else if (state.carriedTool) {
       toast("Tools cannot be discarded");
     }
@@ -391,7 +391,7 @@ function bindBoard(which) {
         state.carried = state[which];
         state[which] = null;
         save(); render();
-        toast(`Picked up chopped ${FOOD[state.carried.type].label}`);
+        toast("Ingredient picked up");
       }, 450);
     }
   });
@@ -441,7 +441,7 @@ function bindScene() {
     hoverable("#wash3d", () => {
       if (!state.sinkItem && state.carried?.type === "tomato") { state.sinkItem = state.carried; state.carried = null; save(); render(); }
       else if (state.sinkItem?.state === "clean" && !state.carried) { state.carried = state.sinkItem; state.sinkItem = null; save(); render(); }
-      else if (state.carried && state.carried.type !== "tomato") toast("Only tomatoes need washing for now");
+      else if (state.carried && state.carried.type !== "tomato") toast("This ingredient does not need washing");
     }, 500);
     if (state.sinkItem) washController = createTomatoWash(document.querySelector("#wash3d"));
   }
@@ -452,7 +452,7 @@ function bindScene() {
       if (!state.carried) return;
       const type = state.carried.type;
       if ((type === "tomato" || type === "sausage") && state.carried.state !== "chopped") return toast("Chop it first");
-      if (state.ovenSlots[type]) return toast(`${FOOD[type].label} is already in the oven`);
+      if (state.ovenSlots[type]) return toast("That ingredient is already in the oven");
       state.ovenSlots[type] = true; state.carried = null; save(); render();
     }, 450);
     if (Object.values(state.ovenSlots).every(Boolean) && !state.finished) hoverable(".oven-drop-zone", () => { state.finished = true; save(); render(); }, 1000);
