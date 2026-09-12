@@ -88,6 +88,8 @@ npm run build
 npm start
 ```
 
+Render 的 Build Command 请使用 `npm ci --include=dev && npm run build`，Start Command 使用 `npm start`。仓库根目录的 `.npmrc` 也会在 `NODE_ENV=production` 时保留 TypeScript、Vite 和 `@types/*` 等构建期依赖；不要在构建阶段使用 `npm ci --omit=dev` 或 `npm install --production`。构建完成后的服务仍由 `npm start` 以 production 模式运行。
+
 `npm start` 默认使用 production 模式，在 **http://localhost:3001** 同时提供构建后的网页与 Socket.IO。若需生产构建下的手动试玩，PowerShell 中可先执行 `$env:ALLOW_DEBUG_IDENTITY = "true"`；macOS/Linux 可执行 `ALLOW_DEBUG_IDENTITY=true npm start`。开发和生产服务器默认使用同一个 3001 端口，切换前先停止已有服务器，或设置不同的 `PORT`。
 
 公网部署需要 HTTPS、WebSocket 支持及正确的 `CLIENT_ORIGINS`。也可单独托管静态前端，但需在构建前设置 `VITE_SERVER_URL`。不要发布 `.env.local`；模型与运行库由构建一并交付。
