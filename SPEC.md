@@ -1,5 +1,7 @@
 # 游戏玩法 Spec（MVP）
 
+> Multiplayer、玩家添加、人脸 enrollment/identity recognition、presence、Socket.IO interfaces、server authorization 与 Render deployment 的工程契约见 [`MULTIPLAYER_IDENTITY_INTEGRATION.md`](./MULTIPLAYER_IDENTITY_INTEGRATION.md)。玩法规则以本文为准；跨屏身份和网络实现以该接入文档为准。
+
 ## 1. 游戏概念
 
 一款四人、多电脑、跨屏合作的体感做菜游戏。
@@ -205,6 +207,8 @@ oven: {
 
 ## 11. 玩家身份与跨屏移动
 
+具体方法论、数据结构、typed events、sticky identity、active-device lease、隐私边界和测试要求统一定义在 [`MULTIPLAYER_IDENTITY_INTEGRATION.md`](./MULTIPLAYER_IDENTITY_INTEGRATION.md)，实现时不得另建一套不兼容协议。
+
 目标方案使用人脸识别：
 
 - 每名玩家的人脸对应一个玩家 ID。
@@ -216,6 +220,8 @@ oven: {
 如果人脸识别未完成，Demo 可以先使用固定玩家 ID 或手动选择玩家。
 
 ## 12. 多屏同步
+
+Socket.IO contract、reconnect/resync、revision、idempotency、server validation 顺序和 Render 部署方案见 [`MULTIPLAYER_IDENTITY_INTEGRATION.md`](./MULTIPLAYER_IDENTITY_INTEGRATION.md)。
 
 四台电脑加入同一个游戏房间。
 
