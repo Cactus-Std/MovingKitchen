@@ -243,11 +243,30 @@ export function intentAction(
   targets: Target[],
   held: Item | undefined,
 ): KitchenAction | null {
-  if (intent.type === "action")
-    return intent.action === "STRETCH"
-      ? { type: "STRETCH" }
-      : held?.kind === "pizza-cutter"
-        ? { type: "SLICE_PIZZA" }
-        : { type: "CHOP" };
-  return targets.find((t) => t.input.id === intent.targetId)?.action ?? null;
+  if (intent.type === "action") {
+    if (!held || intent.heldItemId !== held.id) return null;
+    if (intent.action === "STRETCH")
+      return held.kind === "dough" && intent.itemId === held.id
+        ? { type: "STRETCH" }
+        : null;
+    if (
+      intent.action !== "CHOP" ||
+      targets.find((t) => t.input.id === "work")?.item?.id !== intent.itemId
+    )
+      return null;
+    return held.kind === "pizza-cutter"
+      ? { type: "SLICE_PIZZA" }
+      : held.kind === "knife"
+        ? { type: "CHOP" }
+        : null;
+  }
+  const target = targets.find((t) => t.input.id === intent.targetId);
+  if (!target?.input.allowed || target.input.kind !== intent.type) return null;
+  if (intent.type === "place" && intent.itemId !== held?.id) return null;
+  if (
+    intent.type === "pickup" &&
+    (target.input.kind !== "pickup" || intent.itemId !== target.input.item.id)
+  )
+    return null;
+  return target.action;
 }

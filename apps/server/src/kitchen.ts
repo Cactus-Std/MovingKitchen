@@ -5,6 +5,7 @@ import {
   GAME_MS,
   FOODS,
   STATIONS,
+  getCarriedItem,
   type IngredientKind,
   type Item,
   type KitchenAction,
@@ -160,7 +161,12 @@ export function applyKitchenAction(
     "INVALID_REQUEST",
     "本轮尚未开始或已经结束。",
   );
-  const held = state.items[state.playerCarry[playerId] ?? ""];
+  const held = getCarriedItem(state, playerId);
+  check(
+    !state.playerCarry[playerId] || held,
+    "INVALID_ITEM_STATE",
+    "携带物与玩家身份不一致，请重新同步。",
+  );
   const area = state.stations[station];
   const board = station === "board-1" || station === "board-2";
   const stationIs = (expected: StationId) =>

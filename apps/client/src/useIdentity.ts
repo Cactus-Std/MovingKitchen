@@ -5,7 +5,10 @@ import {
   type Evidence,
 } from "@kitchen/shared";
 import { MediaPipeOnnxFaceRecognitionProvider } from "./vision/MediaPipeOnnxFaceRecognitionProvider";
-import { PredictionStabilizer } from "./vision/predictionStabilizer";
+import {
+  PredictionStabilizer,
+  type StabilizedPrediction,
+} from "./vision/predictionStabilizer";
 import { FACE_RECOGNITION_INTERVAL_MS } from "./vision/config";
 import { command, presence, roomMeta } from "./network";
 
@@ -29,6 +32,8 @@ export function useIdentity(
   sessionId: string | null,
 ) {
   const [locked, setLocked] = useState<string | null>(null);
+  const [absent, setAbsent] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [phase, setPhase] = useState<EnrollmentPhase>("idle");
@@ -43,6 +48,8 @@ export function useIdentity(
 
   useEffect(() => {
     setLocked(null);
+    setAbsent(false);
+    setSwitching(false);
   }, [sessionId]);
   useEffect(() => {
     if (!manual || !sessionId) return;
@@ -52,6 +59,8 @@ export function useIdentity(
     };
     setError(null);
     setLocked(manual);
+    setAbsent(false);
+    setSwitching(false);
     void presence(manual, "manual-debug").catch(report);
     const timer = setInterval(() => {
       if (!document.hidden)
@@ -68,6 +77,9 @@ export function useIdentity(
     setProgress(null);
     setEnrollingPlayerId(null);
     if (!enabled || manual || !sessionId) return;
+    setLocked(null);
+    setAbsent(false);
+    setSwitching(false);
     setError(null);
     const provider = new MediaPipeOnnxFaceRecognitionProvider();
     const session: RecognitionSession = {
@@ -83,18 +95,35 @@ export function useIdentity(
     let timer = 0;
     let lastPositive = -Infinity;
     let lastHeartbeat = -Infinity;
+    let lastVideoTime: number | null = null;
     const report = (e: unknown) => {
       if (!session.cancelled)
         setError(e instanceof Error ? e.message : "身份识别失败，请重试。");
     };
     const publish = (
-      playerId: string,
+      playerId: string | null,
       evidence: Evidence,
       confidence: number | null = null,
     ) => {
       // Network latency must not stall local face inference.
       void presence(playerId, evidence, confidence).catch(report);
     };
+    const reflect = (stable: StabilizedPrediction) => {
+      setLocked(stable.playerId);
+      if (stable.playerId) setAbsent(false);
+      else if (stable.changed) {
+        setAbsent(true);
+        setSwitching(false);
+        lastPositive = -Infinity;
+        lastHeartbeat = -Infinity;
+        publish(null, "cleared");
+      }
+    };
+    // Expire even if the camera freezes or an inference takes too long.
+    const watchdog = window.setInterval(() => {
+      if (!session.cancelled && !session.enrolling)
+        reflect(session.stabilizer.expire());
+    }, 250);
     const run = async () => {
       if (session.cancelled) return;
       const began = performance.now();
@@ -104,9 +133,11 @@ export function useIdentity(
           !session.enrolling &&
           v &&
           v.readyState >= 2 &&
+          v.currentTime !== lastVideoTime &&
           !document.hidden &&
           candidates.current.length
         ) {
+          lastVideoTime = v.currentTime;
           const inference = provider.identify(
             v,
             candidates.current.map((c) => ({
@@ -119,7 +150,11 @@ export function useIdentity(
           if (session.cancelled) return;
           if (!session.enrolling) {
             const stable = session.stabilizer.update(match?.playerId ?? null);
-            setLocked(stable.playerId);
+            reflect(stable);
+            if (match)
+              setSwitching(
+                !!stable.playerId && match.playerId !== stable.playerId,
+              );
             const now = performance.now();
             if (
               stable.playerId &&
@@ -162,6 +197,7 @@ export function useIdentity(
       session.cancelled = true;
       session.abort.abort();
       clearTimeout(timer);
+      clearInterval(watchdog);
       if (sessionRef.current === session) sessionRef.current = null;
       // Do not release an ONNX session while a frame is still using it.
       if (session.inference)
@@ -177,6 +213,8 @@ export function useIdentity(
     let active = true;
     if (!enabled && !manual) {
       setLocked(null);
+      setAbsent(false);
+      setSwitching(false);
       void presence(null, "cleared").catch((e) => {
         if (active) setError(e.message);
       });
@@ -196,6 +234,11 @@ export function useIdentity(
     if (session.enrolling) return;
     const payload = { ...roomMeta(), playerId };
     session.enrolling = true;
+    session.stabilizer.reset();
+    setLocked(null);
+    void presence(null, "cleared").catch((e) => {
+      if (!session.cancelled) setError(e.message);
+    });
     setEnrollingPlayerId(playerId);
     setPhase("loading");
     setProgress(0);
@@ -239,6 +282,8 @@ export function useIdentity(
   }
   return {
     locked: manual ?? locked,
+    absent,
+    switching,
     error,
     progress,
     phase,

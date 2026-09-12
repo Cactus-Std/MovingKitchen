@@ -2,6 +2,7 @@ import {
   IDENTITY_SWITCH_REQUIRED_MATCHES,
   PREDICTION_REQUIRED_MATCHES,
   PREDICTION_WINDOW_SIZE,
+  IDENTITY_ABSENCE_GRACE_MS,
 } from "./config";
 
 export interface StabilizedPrediction {
@@ -14,11 +15,17 @@ export class PredictionStabilizer {
   private stablePlayerId: string | null = null;
   private switchCandidateId: string | null = null;
   private switchCandidateMatches = 0;
+  private lastConfirmedAt: number | null = null;
 
-  update(playerId: string | null): StabilizedPrediction {
+  update(
+    playerId: string | null,
+    now = performance.now(),
+  ): StabilizedPrediction {
     const previousPlayerId = this.stablePlayerId;
+    this.expire(now);
 
     if (this.stablePlayerId) {
+      if (playerId === this.stablePlayerId) this.lastConfirmedAt = now;
       if (!playerId || playerId === this.stablePlayerId) {
         this.resetSwitchCandidate();
       } else if (playerId === this.switchCandidateId) {
@@ -33,6 +40,7 @@ export class PredictionStabilizer {
         this.switchCandidateMatches >= IDENTITY_SWITCH_REQUIRED_MATCHES
       ) {
         this.stablePlayerId = this.switchCandidateId;
+        this.lastConfirmedAt = now;
         this.resetSwitchCandidate();
       }
 
@@ -62,6 +70,7 @@ export class PredictionStabilizer {
 
     if (winningPlayerId && winningCount >= PREDICTION_REQUIRED_MATCHES) {
       this.stablePlayerId = winningPlayerId;
+      this.lastConfirmedAt = now;
       this.predictions.length = 0;
     }
 
@@ -74,7 +83,20 @@ export class PredictionStabilizer {
   reset(): void {
     this.predictions.length = 0;
     this.stablePlayerId = null;
+    this.lastConfirmedAt = null;
     this.resetSwitchCandidate();
+  }
+
+  expire(now = performance.now()): StabilizedPrediction {
+    if (
+      this.stablePlayerId &&
+      this.lastConfirmedAt !== null &&
+      now - this.lastConfirmedAt >= IDENTITY_ABSENCE_GRACE_MS
+    ) {
+      this.reset();
+      return { playerId: null, changed: true };
+    }
+    return { playerId: this.stablePlayerId, changed: false };
   }
 
   private resetSwitchCandidate(): void {

@@ -24,6 +24,7 @@ function rig() {
     deviceId: "one",
     stationId: "storage-sink",
     expectedRevision: room.kitchen.revision,
+    controlToken: room.controlLeaseByPlayer[player]!.token,
     actionId: id,
     action: { type: "PICKUP_STORAGE", ingredient: "tomato" },
   });
@@ -47,6 +48,9 @@ describe("identity ownership and recovery", () => {
     expect(room.controlLeaseByPlayer[player]?.deviceId).toBe("two");
     expect(room.kitchen.playerCarry[player]).toBe(item);
     expect(() => rooms.action(action("b"))).toThrow("另一台电脑");
+    rooms.presence(room.code, "one", null, null, "cleared");
+    expect(room.controlLeaseByPlayer[player]?.deviceId).toBe("two");
+    expect(room.kitchen.playerCarry[player]).toBe(item);
   });
   it("is idempotent and rejects reuse with a different action", () => {
     const { rooms, room, action } = rig();

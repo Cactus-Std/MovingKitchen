@@ -51,6 +51,7 @@ it("accepts simultaneous commands at different stations from one snapshot, inclu
       roomCode: room.code,
       stationId: stations[i],
       expectedRevision: revision,
+      controlToken: room.controlLeaseByPlayer[room.players[i].id]!.token,
       action,
     }),
   );
@@ -66,6 +67,7 @@ it("accepts simultaneous commands at different stations from one snapshot, inclu
       roomCode: room.code,
       stationId: "board-1",
       expectedRevision: revision,
+      controlToken: room.controlLeaseByPlayer[room.players[1].id]!.token,
       action: { type: "RETURN_TOOL" },
     }),
   ).toThrow("状态已更新");
@@ -99,6 +101,10 @@ it("lets both boards advance chopping from the same revision", () => {
       roomCode: room.code,
       stationId: room.stationByDevice[deviceId]!,
       expectedRevision: revision,
+      controlToken:
+        room.controlLeaseByPlayer[
+          room.presenceByDevice[deviceId].lockedPlayerId!
+        ]!.token,
       action,
     });
   };

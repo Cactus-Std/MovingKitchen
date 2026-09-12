@@ -75,6 +75,7 @@ export interface DevicePresence {
 export interface ControlLease {
   playerId: string;
   deviceId: string;
+  token: string;
   acquiredAt: number;
   lastHeartbeatAt: number;
 }
@@ -145,6 +146,7 @@ export interface CreateRoomPayload extends CommandMeta {
 export type JoinRoomPayload = RoomCommand;
 export interface KitchenActionPayload extends RoomCommand {
   actionId: string;
+  controlToken: string;
   expectedRevision: number;
   stationId: StationId;
   action: KitchenAction;

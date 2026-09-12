@@ -41,6 +41,7 @@ import {
 } from "./gameView";
 import { TomatoWash } from "./TomatoWash";
 import { EnrollmentProgress } from "./EnrollmentProgress";
+import { getGameControl } from "./gameControl";
 
 function Art({ item }: { item: Item }) {
   return toolImages[item.kind] ? (
@@ -73,7 +74,7 @@ export function App() {
     [guide, setGuide] = useState(false);
   const video = useRef<HTMLVideoElement | null>(null),
     pose = useRef<PoseSample | null>(null),
-    flight = useRef(false);
+    flight = useRef<string | null>(null);
   const identity = useIdentity(
     video,
     cameraOn && net.ready,
@@ -83,22 +84,25 @@ export function App() {
   );
   const station = room?.stationByDevice[deviceId];
   const playerId = identity.locked;
-  const player = room?.players.find((p) => p.id === playerId);
-  const lease = playerId ? room?.controlLeaseByPlayer[playerId] : undefined;
+  const control = identity.switching
+    ? null
+    : getGameControl(room, deviceId, playerId);
+  const player = control?.player;
+  const contextId = `${room?.code ?? "home"}:${k?.startedAt ?? "lobby"}:${station ?? "unassigned"}:${control?.context.controlToken ?? "unconfirmed"}`;
   const canAct =
     !!room &&
     !!station &&
-    !!playerId &&
-    lease?.deviceId === deviceId &&
+    !!control &&
+    !identity.enrolling &&
     net.ready &&
     k?.status === "playing";
-  const held = k?.items[k.playerCarry[playerId ?? ""] ?? ""];
+  const held = control?.held;
   const game =
     room && station
       ? gameTargets(room, station, held)
       : { targets: [], actionTarget: null };
-  const latest = useRef({ canAct, game, held, station });
-  latest.current = { canAct, game, held, station };
+  const latest = useRef({ canAct, game, held, station, control, contextId });
+  latest.current = { canAct, game, held, station, control, contextId };
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
     setMessage(null);
@@ -112,28 +116,38 @@ export function App() {
     }
   }
   const send = useCallback(async (action: KitchenAction, id?: string) => {
-    if (flight.current || !latest.current.canAct)
+    const current = latest.current;
+    if (flight.current || !current.canAct || !current.control)
       return {
         ok: false as const,
         reason: "等待连接、身份确认或上一次操作完成。",
       };
-    flight.current = true;
+    const actionId = id ?? crypto.randomUUID();
+    flight.current = actionId;
     setPending(true);
     setMessage(null);
     clearError();
     try {
-      await kitchenAction(action, id);
+      await kitchenAction(action, current.control.context, actionId);
       return { ok: true as const };
     } catch (e) {
       const reason = e instanceof Error ? e.message : "操作失败";
-      setMessage(reason);
+      if (latest.current.contextId === current.contextId) setMessage(reason);
       return { ok: false as const, reason };
     } finally {
-      flight.current = false;
-      setPending(false);
+      if (flight.current === actionId) {
+        flight.current = null;
+        setPending(false);
+      }
     }
   }, []);
   const onIntent = async (intent: KitchenIntent) => {
+    if (
+      intent.contextId !== latest.current.contextId ||
+      intent.playerId !== latest.current.control?.player.id ||
+      intent.sceneId !== latest.current.station
+    )
+      return { ok: false as const, reason: "玩家或工位已变化，请重新操作。" };
     const action = intentAction(
       intent,
       latest.current.game.targets,
@@ -148,7 +162,7 @@ export function App() {
     enabled: canAct,
     cameraOn: cameraOn && !!room,
     context: {
-      contextId: room ? `${room.code}:${k?.startedAt}` : "home",
+      contextId,
       playerId: canAct ? playerId : null,
       sceneId: station ?? "unassigned",
       held: held ? heldInput(held) : null,
@@ -158,6 +172,11 @@ export function App() {
     getTargets: () => latest.current.game.targets.map((t) => t.input),
     onIntent,
     onPose: (p) => {
+      if (
+        p.contextId !== latest.current.contextId ||
+        p.playerId !== latest.current.control?.player.id
+      )
+        return;
       pose.current = p;
       if (
         latest.current.held?.kind === "cloth" &&
@@ -182,6 +201,13 @@ export function App() {
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const inputRef = useRef(input);
   inputRef.current = input;
+  useEffect(() => {
+    flight.current = null;
+    setPending(false);
+    pointer.current = null;
+    pose.current = null;
+    wipe.current = null;
+  }, [contextId]);
   useEffect(() => {
     if (cameraOn || !canAct) return;
     let frame = 0;
@@ -235,6 +261,8 @@ export function App() {
           ? { id: held.id, kind: held.kind, stretched: held.stretched }
           : null,
         control: canAct,
+        identityAbsent: identity.absent,
+        identitySwitching: identity.switching,
         kitchen: k,
         targets: game.targets.map((t) => ({
           id: t.input.id,
@@ -672,9 +700,13 @@ export function App() {
                   <div className="identity-notice">
                     {!net.ready
                       ? "正在重新连接厨房…"
-                      : !player
-                        ? "面对摄像头识别厨师身份，或在测试模式选择厨师。"
-                        : "控制权在另一台电脑。请重新面对摄像头，或点击接管。"}
+                      : identity.absent
+                        ? "当前未识别到玩家，请回到摄像头前。携带物仍保留在原玩家名下。"
+                        : identity.switching
+                          ? "正在确认新玩家，请稍候。"
+                          : !playerId
+                            ? "面对摄像头识别厨师身份，或在测试模式选择厨师。"
+                            : "等待当前玩家身份与控制权确认，请面对摄像头，或在测试模式点击接管。"}
                   </div>
                 )}
               </section>
@@ -686,7 +718,10 @@ export function App() {
                       { "--chef": player?.color ?? "#888" } as CSSProperties
                     }
                   />
-                  <b>{player?.name ?? "等待厨师"}</b>
+                  <b>
+                    {player?.name ??
+                      (identity.absent ? "未识别到玩家" : "等待厨师确认")}
+                  </b>
                   <span>
                     {held
                       ? `携带：${labels[held.kind]}${held.stretched ? " · 已展开" : ""}`

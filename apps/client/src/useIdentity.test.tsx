@@ -37,6 +37,10 @@ beforeEach(() => {
     value: false,
     configurable: true,
   });
+  Object.defineProperty(video.current, "currentTime", {
+    get: () => performance.now() / 1000,
+    configurable: true,
+  });
   fake.initialize.mockResolvedValue(undefined);
   fake.identify.mockResolvedValue({ playerId: "chef", similarity: 0.9 });
   fake.enroll.mockResolvedValue([1]);
@@ -55,6 +59,35 @@ it("acquires the same stable identity within 350ms when inference is fast", asyn
     await vi.advanceTimersByTimeAsync(350);
   });
   expect(result.current.locked).toBe("chef");
+});
+it("suspends controls during a different-player candidate while keeping brief misses uninterrupted", async () => {
+  const candidates = [
+    ...roster,
+    { playerId: "other", template: { ...FACE_MODEL, vector: [-1] } },
+  ];
+  const { result } = renderHook(() =>
+    useIdentity(video, true, candidates, null, "ROOM"),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(350);
+  });
+  fake.identify.mockResolvedValue(null);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  expect(result.current.locked).toBe("chef");
+  expect(result.current.switching).toBe(false);
+  fake.identify.mockResolvedValue({ playerId: "other", similarity: 0.9 });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  expect(result.current.locked).toBe("chef");
+  expect(result.current.switching).toBe(true);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(400);
+  });
+  expect(result.current.locked).toBe("other");
+  expect(result.current.switching).toBe(false);
 });
 it("keeps recognizing while an identity network acknowledgement is delayed", async () => {
   fake.presence.mockImplementation(() => new Promise(() => {}));
@@ -179,4 +212,84 @@ it("discards late results and releases an in-flight model on camera shutdown", a
   });
   expect(hook.result.current.locked).toBeNull();
   expect(fake.dispose).toHaveBeenCalledOnce();
+});
+it("tolerates brief misses, clears after three seconds, and never chooses a default player", async () => {
+  const { result } = renderHook(() =>
+    useIdentity(video, true, roster, null, "ROOM"),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(350);
+  });
+  expect(result.current.locked).toBe("chef");
+  fake.identify.mockResolvedValue(null);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(result.current.locked).toBe("chef");
+  expect(result.current.absent).toBe(false);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1200);
+  });
+  expect(result.current.locked).toBeNull();
+  expect(result.current.absent).toBe(true);
+  const cleared = fake.presence.mock.calls.findIndex(
+    ([, evidence]) => evidence === "cleared",
+  );
+  expect(cleared).toBeGreaterThan(-1);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(result.current.locked).toBeNull();
+  expect(fake.presence.mock.calls.slice(cleared + 1)).toHaveLength(0);
+  fake.identify.mockResolvedValue({ playerId: "chef", similarity: 0.9 });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(400);
+  });
+  expect(result.current.locked).toBe("chef");
+  expect(result.current.absent).toBe(false);
+});
+it("expires a locked identity if video frames stop advancing", async () => {
+  const { result } = renderHook(() =>
+    useIdentity(video, true, roster, null, "ROOM"),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(350);
+  });
+  Object.defineProperty(video.current, "currentTime", {
+    value: 0.3,
+    configurable: true,
+  });
+  const calls = fake.identify.mock.calls.length;
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3500);
+  });
+  expect(fake.identify).toHaveBeenCalledTimes(calls);
+  expect(result.current.locked).toBeNull();
+  expect(result.current.absent).toBe(true);
+});
+it("expires even while a slow inference is still pending, without using its late result as a lock", async () => {
+  const { result } = renderHook(() =>
+    useIdentity(video, true, roster, null, "ROOM"),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(350);
+  });
+  let complete!: (match: { playerId: string; similarity: number }) => void;
+  fake.identify
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    )
+    .mockResolvedValue(null);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3500);
+  });
+  expect(result.current.locked).toBeNull();
+  await act(async () => {
+    complete({ playerId: "chef", similarity: 0.9 });
+    await vi.advanceTimersByTimeAsync(50);
+  });
+  expect(result.current.locked).toBeNull();
 });

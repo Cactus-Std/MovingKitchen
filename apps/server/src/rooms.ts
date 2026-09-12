@@ -291,8 +291,14 @@ export class Rooms {
         "PLAYER_NOT_ENROLLED",
         "请先录脸。",
       );
-    this.release(e, device, player.id);
     const previous = r.presenceByDevice[device];
+    if (evidence === "lock-heartbeat")
+      check(
+        previous?.lockedPlayerId === player.id,
+        "CONTROL_LEASE_MOVED",
+        "当前电脑的控制身份已经变化。",
+      );
+    this.release(e, device, player.id);
     const fresh = evidence === "positive-match" || evidence === "manual-debug";
     const presence: DevicePresence = {
       deviceId: device,
@@ -306,11 +312,14 @@ export class Rooms {
     };
     r.presenceByDevice[device] = presence;
     const lease = r.controlLeaseByPlayer[player.id];
+    const continuing =
+      lease?.deviceId === device && now - lease.lastHeartbeatAt <= PRESENCE_TTL;
     if (fresh)
       r.controlLeaseByPlayer[player.id] = {
         playerId: player.id,
         deviceId: device,
-        acquiredAt: lease?.deviceId === device ? lease.acquiredAt : now,
+        token: continuing ? lease.token : randomUUID(),
+        acquiredAt: continuing ? lease.acquiredAt : now,
         lastHeartbeatAt: now,
       };
     else if (
@@ -336,6 +345,7 @@ export class Rooms {
     const key = `${payload.deviceId}:${payload.actionId}`,
       fingerprint = JSON.stringify({
         station: payload.stationId,
+        controlToken: payload.controlToken,
         action: payload.action,
       });
     const cached = e.actions.get(key);
@@ -372,6 +382,12 @@ export class Rooms {
       `player:${presence.lockedPlayerId}`,
       `station:${payload.stationId}`,
     ];
+    check(
+      typeof payload.controlToken === "string" &&
+        payload.controlToken === lease.token,
+      "CONTROL_LEASE_MOVED",
+      "控制身份已变化，请重新确认当前玩家。",
+    );
     check(
       payload.expectedRevision <= r.kitchen.revision &&
         payload.expectedRevision >= e.roundRevision &&

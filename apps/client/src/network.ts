@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { io, type Socket } from "socket.io-client";
+import { getGameControl, type ActionContext } from "./gameControl";
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -124,16 +125,27 @@ export async function presence(
 }
 export async function kitchenAction(
   action: KitchenAction,
+  context: ActionContext,
   actionId: string = crypto.randomUUID(),
 ): Promise<void> {
   if (!state.room || !state.ready) throw new Error("等待厨房重新连接。");
-  const stationId = state.room.stationByDevice[deviceId];
-  if (!stationId) throw new Error("请先在准备室选择这台电脑的工位。");
+  const control = getGameControl(
+    state.room,
+    deviceId,
+    state.room.presenceByDevice[deviceId]?.lockedPlayerId ?? null,
+  );
+  if (
+    !control ||
+    control.context.controlToken !== context.controlToken ||
+    control.context.roomCode !== context.roomCode ||
+    control.context.stationId !== context.stationId
+  )
+    throw new Error("控制身份或工位已变化，请重新操作。");
   const payload = {
-    ...roomMeta(),
-    stationId,
+    ...meta(),
+    deviceId,
+    ...context,
     actionId,
-    expectedRevision: state.room.kitchen.revision,
     action,
   };
   // A transport timeout is uncertain: retry exactly the same action, never a new ID.

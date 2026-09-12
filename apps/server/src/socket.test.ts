@@ -103,6 +103,8 @@ it("accepts four concurrently emitted commands and keeps four independent player
         stationId: STATIONS[i],
         actionId: `parallel-${i}`,
         expectedRevision: synced.data.kitchen.revision,
+        controlToken:
+          synced.data.controlLeaseByPlayer[synced.data.players[i].id]!.token,
         action: actions[i],
       }),
     ),
@@ -205,6 +207,7 @@ it("runs four real Socket.IO clients through ownership, conflicts, malformed req
     stationId: STATIONS[0],
     actionId: "pick",
     expectedRevision: synced.data.kitchen.revision,
+    controlToken: synced.data.controlLeaseByPlayer[player]!.token,
     action: { type: "PICKUP_STORAGE" as const, ingredient: "tomato" as const },
   };
   const picked = await clients[0].emitWithAck("kitchen:action", payload);

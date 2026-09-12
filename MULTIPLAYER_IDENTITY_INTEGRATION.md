@@ -155,6 +155,7 @@ export interface DevicePresence {
 export interface PlayerControlLease {
   playerId: PlayerId;
   deviceId: DeviceId;
+  token: string; // server-issued; renewed when ownership changes or a lease is reacquired
   acquiredAt: number;
   lastHeartbeatAt: number;
 }
@@ -312,8 +313,9 @@ function acceptFaceTemplate(upload: FaceTemplateUpload): FaceTemplate {
 - cosine match threshold：0.62；
 - best 与 second-best margin：0.08；
 - 初次 lock：5 个 prediction window 中同一 player 至少 4 次；
-- 已 lock 后不因 null/missed detection 清除；
+- 已 lock 后容忍短暂 null/missed detection；连续 3 秒未确认原玩家则清除身份并发送 cleared，携带物保留在原玩家名下，不选择默认玩家；
 - identity switch：另一 enrolled player 连续 5 次明确匹配；
+- 换人候选确认期间暂停游戏输入；冻结的视频帧不能重复计作新证据，独立计时器保证推理阻塞时仍能到期清除；
 - 离开 room、显式 reset 或 recognition lifecycle teardown 时清除。
 
 这些参数必须通过目标 camera、灯光、玩家人群测试校准，不能被视为通用 biometric threshold。
@@ -455,6 +457,7 @@ export type KitchenAction =
 
 export interface KitchenActionPayload extends CommandMeta {
   actionId: ActionId;
+  controlToken: string;
   roomCode: RoomCode;
   deviceId: DeviceId;
   expectedRevision: Revision;
@@ -545,7 +548,7 @@ export interface ServerToClientEvents {
 4. device is currently joined to room?
 5. device presence heartbeat is fresh?
 6. lockedPlayerId exists and is enrolled?
-7. device owns that player's active control lease?
+7. device owns that player's active control lease and controlToken matches the lease at action creation?
 8. actionId has not already been applied?
 9. expectedRevision is within this round and current revision, and the acting player/station have not changed since it?
 10. player/item/station/action invariants pass?
@@ -554,6 +557,8 @@ export interface ServerToClientEvents {
 ```
 
 全局 revision 继续用于快照排序；计时更新或其他玩家在其他工位的动作不构成当前动作冲突。服务器记录玩家／工位最后修改的 revision，仅拒绝相关资源已变化、来自旧轮次或未来版本的请求，随后仍检查当前食材、携带槽与工位规则。这样四台电脑可以并行工作，同一工位的竞争操作仍串行校验。
+
+客户端固定操作发生时的 room、station、revision 和 controlToken；不得在迟到回调或重试时改用最新身份。服务器仍从 presence 推导 playerId，并要求 controlToken 与该玩家的当前 lease 一致。前端仅在识别身份、device presence、lease owner 和物品 heldBy/location 一致时显示可操作的携带物；身份变更时清除旧悬停／切割轨迹及本地 pending UI，旧请求结果不能解除新玩家的 pending 状态。
 
 必须由 server 验证的 gameplay invariants 包括：
 
@@ -712,7 +717,7 @@ Prototype 中 encrypted model packaging 不是 DRM；浏览器必须获得可执
 - 512-d finite/L2 template validation；
 - cosine threshold + second-best margin；
 - initial 4-of-5 identity acquisition；
-- missed detection 不清除 lock；
+- 短暂 missed detection 保留 lock，连续 3 秒未确认身份则清除且不回退默认玩家；
 - 5 consecutive matches 才切换 player；
 - room snapshot 不重启 recognition lifecycle；
 - presence 使用 server clock；
@@ -777,7 +782,7 @@ Prototype 中 encrypted model packaging 不是 DRM；浏览器必须获得可执
 - 玩家携带物跟随 player ID 跨设备且不会并发复制；
 - raw camera/gesture frames 从不进入网络；
 - reconnect/resync、revision conflict 和 duplicate action 有测试；
-- sticky identity 不因漏检中断游戏，明确换人时能可靠切换；
+- sticky identity 容忍短暂漏检，持续缺席会清空屏幕身份并保留个人物品，明确换人时能可靠切换；
 - reference model/WASM licenses 与 build assets 完整；
 - 四人四机真实验收通过；
 - Render 或其他生产环境中的 health、WebSocket reconnect 和 deployment interruption 已验证。

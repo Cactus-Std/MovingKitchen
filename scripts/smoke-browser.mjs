@@ -50,7 +50,10 @@ const choose = async (page, name) => {
   await page
     .getByRole("button", { name: new RegExp(`^${name}( · 接管)?$`) })
     .click();
-  await wait(page, () => JSON.parse(window.render_game_to_text()).control);
+  await page.waitForFunction((name) => {
+    const s = JSON.parse(window.render_game_to_text());
+    return s.control && s.player === name;
+  }, name);
 };
 try {
   for (let i = 0; i < 4; i++) {
@@ -121,6 +124,31 @@ try {
       target(page, ["faucet", "tool-knife", "tool-knife", "tool-oven-mitt"][i]),
     ),
   );
+  await choose(sink, "Alice");
+  await target(sink, "food-cheese");
+  const aliceItem = (await state(sink)).held.id;
+  await choose(sink, "Bob");
+  assert.equal(
+    (await state(sink)).held,
+    null,
+    "Bob must not inherit Alice carry",
+  );
+  await target(sink, "food-dough");
+  const bobItem = (await state(sink)).held.id;
+  await choose(board1, "Alice");
+  assert.equal((await state(board1)).held.id, aliceItem);
+  assert.equal((await state(sink)).held.id, bobItem);
+  await choose(board2, "Bob");
+  await wait(sink, () => !JSON.parse(window.render_game_to_text()).control);
+  assert.equal(
+    (await state(sink)).held,
+    null,
+    "Old station must hide a transferred player carry",
+  );
+  assert.equal((await state(board2)).held.id, bobItem);
+  await shot(board1, "alice-inventory");
+  await shot(board2, "bob-inventory");
+  await Promise.all([target(board1, "trash"), target(board2, "trash")]);
   await choose(sink, "Alice");
   await target(sink, "food-tomato");
   await wait(

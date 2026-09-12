@@ -19,7 +19,8 @@
     "postinstall": "node scripts/copy-runtime-assets.mjs",
     "model:check": "node scripts/check-face-model.mjs",
     "test:browser": "node scripts/smoke-browser.mjs",
-    "test:camera": "node scripts/smoke-camera.mjs"
+    "test:camera": "node scripts/smoke-camera.mjs",
+    "test:identity": "node scripts/smoke-identity.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

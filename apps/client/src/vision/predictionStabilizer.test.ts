@@ -53,7 +53,7 @@ describe("PredictionStabilizer", () => {
     });
   });
 
-  it("clears the lock only when explicitly reset", () => {
+  it("also supports explicitly resetting the lock", () => {
     const stabilizer = new PredictionStabilizer();
     for (let index = 0; index < 4; index += 1) stabilizer.update("jack");
     stabilizer.reset();
@@ -61,5 +61,11 @@ describe("PredictionStabilizer", () => {
       playerId: null,
       changed: false,
     });
+  });
+  it("keeps short misses but clears an absent identity after three seconds", () => {
+    const stabilizer = new PredictionStabilizer();
+    for (let i = 0; i < 4; i++) stabilizer.update("alice", i * 100);
+    expect(stabilizer.update(null, 3200).playerId).toBe("alice");
+    expect(stabilizer.update(null, 3300).playerId).toBeNull();
   });
 });
