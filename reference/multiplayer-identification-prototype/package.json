@@ -1,0 +1,36 @@
+{
+  "name": "multiplayer-identification",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @roaming/shared && npm run build -w @roaming/server && npm run build -w @roaming/client",
+    "dev": "npm run build -w @roaming/shared && concurrently -n shared,server,client -c magenta,cyan,green \"npm run dev -w @roaming/shared\" \"npm run dev -w @roaming/server\" \"npm run dev -w @roaming/client\"",
+    "dev:client": "npm run build -w @roaming/shared && npm run dev -w @roaming/client",
+    "dev:server": "npm run build -w @roaming/shared && npm run dev -w @roaming/server",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "model:check": "node scripts/check-face-model.mjs",
+    "lint": "eslint .",
+    "postinstall": "node scripts/copy-mediapipe-assets.mjs",
+    "test": "npm run build -w @roaming/shared && npm run test -w @roaming/shared && npm run test -w @roaming/server && npm run test -w @roaming/client",
+    "typecheck": "npm run build -w @roaming/shared && npm run typecheck -w @roaming/shared && npm run typecheck -w @roaming/server && npm run typecheck -w @roaming/client"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

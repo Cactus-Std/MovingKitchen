@@ -1,0 +1,7 @@
+export const ROOM_CODE_LENGTH = 4;
+export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const MAX_PLAYERS = 4;
+export const MIN_PLAYERS = 2;
+export const DEFAULT_SERVER_PORT = 3001;
+export const DEFAULT_SERVER_HOST = '0.0.0.0';
+export const PRESENCE_EXPIRATION_MS = 2_000;

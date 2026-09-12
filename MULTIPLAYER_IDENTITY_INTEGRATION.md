@@ -52,15 +52,39 @@ flowchart LR
 
 ## 3. 参考项目中应迁移的模块
 
+### 3.1 MovingKitchen 跟踪的 reference snapshot
+
+MovingKitchen repository 中已经复制并跟踪了一份源码快照：
+
+```text
+reference/multiplayer-identification-prototype/
+```
+
+该目录是 MovingKitchen Git repository 中的普通 tracked source directory，会随 MovingKitchen commit 一起交付；它不保留 `multiplayer-identification` 原 repository 的 `.git` metadata 或独立历史。目录包含当前 reference working tree 的源码、tests、配置、模型和文档，但刻意排除 `node_modules`、`dist`、cache、`.env.local` 与安装时生成的 MediaPipe/ONNX Runtime WASM。
+
+使用原则：
+
+- 把它当作 read-only implementation example；
+- 可以比较、复制或重构其中的 pattern；
+- 不要从 MovingKitchen 正式源码相对 import 该目录；
+- 不要把它加入 npm workspace、Docker build context 或 production bundle；
+- 对 reference snapshot 的直接修改会出现在 MovingKitchen Git diff 中，但这里只保存可供查阅的 snapshot；正式产品修改仍应落到 MovingKitchen 自己的正式 source tree，除非团队明确决定刷新这份 reference。
+
+若要独立运行这份快照，可进入该目录执行 `npm install`；postinstall/prebuild 会重新生成被排除的 WASM assets。
+
+### 3.2 其他开发者获取 reference
+
 Clone：
 
 ```bash
 git clone https://github.com/Cactus-Std/multiplayer-identification.git
 ```
 
-正式迁移前，应先把 reference repo 当前通过测试的工作树合并并打 tag，随后在 MovingKitchen 的 ADR/lockfile 中记录 exact commit SHA。不要长期依赖 default branch 的浮动状态，否则模型 preprocessing、event schema 与文档可能在不同时间被复制。
+其他开发者可以把 reference repository clone 为 MovingKitchen 的 sibling repo。正式迁移前，应先把 reference repo 当前通过测试的工作树合并并打 tag，随后在 MovingKitchen 的 ADR/lockfile 中记录 exact commit SHA。不要长期依赖 default branch 的浮动状态，否则模型 preprocessing、event schema 与文档可能在不同时间被复制。
 
-建议优先参考或迁移：
+### 3.3 建议参考的模块
+
+以下路径均相对于 `multiplayer-identification` repo 或 local snapshot 根目录：
 
 | Reference path                                | MovingKitchen 用途                                     |
 | --------------------------------------------- | ------------------------------------------------------ |

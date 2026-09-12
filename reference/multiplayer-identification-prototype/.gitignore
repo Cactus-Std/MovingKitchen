@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+coverage/
+*.log
+.playwright-cli/
+apps/client/public/mediapipe/
+apps/client/public/onnxruntime/
