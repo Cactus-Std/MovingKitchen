@@ -10,6 +10,7 @@ import type {
   KitchenAction,
   Evidence,
 } from "@kitchen/shared";
+import { activeCommandErrorText, activeText } from "./i18n";
 type State = {
   room: RoomState | null;
   roster: IdentityCandidate[];
@@ -70,7 +71,13 @@ export async function command<E extends keyof ClientToServerEvents>(
   event: E,
   payload: Payload<E>,
 ): Promise<Result<E>> {
-  if (!socket.connected) throw new Error("服务器连接已断开，请等待重新连接。");
+  if (!socket.connected)
+    throw new Error(
+      activeText(
+        "The kitchen server disconnected. Wait for it to reconnect.",
+        "服务器连接已断开，请等待重新连接。",
+      ),
+    );
   const emit = socket.timeout(5000).emitWithAck.bind(socket) as <
     T extends keyof ClientToServerEvents,
   >(
@@ -79,14 +86,19 @@ export async function command<E extends keyof ClientToServerEvents>(
   ) => Promise<Result<T>>;
   const result = await emit(event, payload);
   if (!result.ok) {
-    update({ error: result.error.message });
-    throw new Error(result.error.message);
+    const message = activeCommandErrorText(
+      result.error.code,
+      result.error.message,
+    );
+    update({ error: message });
+    throw new Error(message);
   }
   if (result.data) applyRoom(result.data);
   return result;
 }
 export const roomMeta = () => {
-  if (!state.room) throw new Error("请先加入房间。");
+  if (!state.room)
+    throw new Error(activeText("Join a kitchen first.", "请先加入房间。"));
   return { ...meta(), roomCode: state.room.code, deviceId };
 };
 export async function createRoom(debugMode: boolean) {
@@ -128,7 +140,10 @@ export async function kitchenAction(
   context: ActionContext,
   actionId: string = crypto.randomUUID(),
 ): Promise<void> {
-  if (!state.room || !state.ready) throw new Error("等待厨房重新连接。");
+  if (!state.room || !state.ready)
+    throw new Error(
+      activeText("Wait for the kitchen to reconnect.", "等待厨房重新连接。"),
+    );
   const control = getGameControl(
     state.room,
     deviceId,
@@ -140,7 +155,12 @@ export async function kitchenAction(
     control.context.roomCode !== context.roomCode ||
     control.context.stationId !== context.stationId
   )
-    throw new Error("控制身份或工位已变化，请重新操作。");
+    throw new Error(
+      activeText(
+        "The chef identity or station changed. Please try the action again.",
+        "控制身份或工位已变化，请重新操作。",
+      ),
+    );
   const payload = {
     ...meta(),
     deviceId,
@@ -176,7 +196,10 @@ socket.on("connect_error", () =>
   update({
     connected: false,
     ready: false,
-    error: "连接不到厨房服务器，请检查网络。",
+    error: activeText(
+      "Can't reach the kitchen server. Check your network connection.",
+      "连接不到厨房服务器，请检查网络。",
+    ),
   }),
 );
 socket.on("room:state", applyRoom);

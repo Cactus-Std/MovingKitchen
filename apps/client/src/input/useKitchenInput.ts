@@ -12,10 +12,12 @@ import {
   type PoseSample,
 } from "./contracts";
 import type { Frame, Source } from "./types";
+import { runtimeErrorText, text, type Language } from "../i18n";
 
 export interface KitchenInputOptions {
   enabled: boolean;
   cameraOn: boolean;
+  language?: Language;
   assets?: CameraAssets;
   context: InputContext;
   getTargets(): InteractionTarget[];
@@ -23,7 +25,9 @@ export interface KitchenInputOptions {
   onPose?(pose: PoseSample): void;
 }
 export function useKitchenInput(options: KitchenInputOptions) {
-  const controller = useRef(new KitchenInputController());
+  const language = options.language ?? "zh";
+  const controller = useRef(new KitchenInputController(language));
+  controller.current.setLanguage(language);
   const latest = useRef(options);
   latest.current = options;
   const active = useRef(true);
@@ -56,13 +60,23 @@ export function useKitchenInput(options: KitchenInputOptions) {
         result = {
           ok: false,
           reason:
-            error instanceof Error ? error.message : "宿主处理失败，请重试",
+            error instanceof Error
+              ? runtimeErrorText(language, error.message)
+              : text(
+                  language,
+                  "The kitchen could not process that action. Try again.",
+                  "宿主处理失败，请重试",
+                ),
         };
       }
       if (!active.current || flight.current?.id !== intent.intentId) return;
       flight.current = null;
       setBusy(false);
-      setFeedback(result.ok ? "宿主已确认" : result.reason);
+      setFeedback(
+        result.ok
+          ? text(language, "Kitchen confirmed", "宿主已确认")
+          : result.reason,
+      );
     })();
   };
   const receive = (frame: Frame, source: Source) => {
@@ -98,6 +112,7 @@ export function useKitchenInput(options: KitchenInputOptions) {
   };
   const camera = useHandCamera({
     cameraOn: options.cameraOn,
+    language,
     assets: options.assets,
     onTrackingReset: () => {
       controller.current.resetMotion();

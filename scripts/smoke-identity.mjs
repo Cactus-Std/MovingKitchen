@@ -47,6 +47,12 @@ try {
     1,
     "Identity fixture requires the Vite development frontend",
   );
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  assert.equal(
+    await page.evaluate(() => document.documentElement.lang),
+    "zh-CN",
+    "The pre-game language switch must update the document language",
+  );
   const state = () =>
     page.evaluate(() => JSON.parse(window.render_game_to_text()));
   const target = async (id) => {

@@ -122,6 +122,6 @@ it("does not relabel a delayed old-player action with the new player token", asy
   fake.socket.emitWithAck.mockClear();
   await expect(
     network.kitchenAction({ type: "DISCARD" }, context, "old-intent"),
-  ).rejects.toThrow("控制身份或工位已变化");
+  ).rejects.toThrow("The chef identity or station changed");
   expect(fake.socket.emitWithAck).not.toHaveBeenCalled();
 });

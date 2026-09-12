@@ -26,8 +26,10 @@ try {
     if (message.type() === "error") console.error(message.text());
   });
   await page.goto(process.env.KITCHEN_TEST_URL ?? "http://localhost:5180");
-  await page.getByRole("button", { name: /创建厨房/ }).click();
-  await page.getByRole("button", { name: "开启摄像头", exact: true }).click();
+  await page.getByRole("button", { name: /Create kitchen/ }).click();
+  await page
+    .getByRole("button", { name: "Turn on camera", exact: true })
+    .click();
   await page.waitForFunction(
     () => {
       const video = document.querySelector("video");
@@ -76,10 +78,16 @@ try {
     return window.testCameraTracks.length;
   });
   assert.equal(tracks, 1);
-  await page.getByRole("textbox", { name: "厨师名字" }).fill("Camera test");
-  await page.getByRole("button", { name: "＋ 添加厨师" }).click();
-  await page.getByRole("button", { name: "同意并录入选中厨师的人脸" }).click();
-  await page.getByRole("progressbar", { name: "人脸录入进度" }).waitFor();
+  await page.getByRole("textbox", { name: "Chef name" }).fill("Camera test");
+  await page.getByRole("button", { name: "+ Add chef" }).click();
+  await page
+    .getByRole("button", {
+      name: "Consent and enroll the selected chef's face",
+    })
+    .click();
+  await page
+    .getByRole("progressbar", { name: "Face enrollment progress" })
+    .waitFor();
   if (process.env.KITCHEN_TEST_OUTPUT) {
     await mkdir(process.env.KITCHEN_TEST_OUTPUT, { recursive: true });
     await page.screenshot({
@@ -88,7 +96,7 @@ try {
       animations: "disabled",
     });
   }
-  await page.getByRole("button", { name: "退出", exact: true }).click();
+  await page.getByRole("button", { name: "Exit", exact: true }).click();
   await page.waitForFunction(() =>
     window.testCameraTracks.every((track) => track.readyState === "ended"),
   );
