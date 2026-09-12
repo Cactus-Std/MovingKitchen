@@ -10,14 +10,14 @@ import {
 import type { FaceRecognitionProvider } from "./faceRecognitionProvider";
 import { MediaPipeFaceDetector } from "./faceDetector";
 import {
-  FACE_DETECTION_INTERVAL_MS,
+  FACE_ENROLLMENT_INTERVAL_MS,
+  ENROLLMENT_SAMPLE_COUNT,
   FACE_ENROLLMENT_MIN_WIDTH_RATIO,
   FACE_MIN_INSIDE_RATIO,
   FACE_RECOGNITION_MIN_WIDTH_RATIO,
 } from "./config";
 
 const EMBEDDING_SIZE = 112;
-const ENROLLMENT_SAMPLE_COUNT = 10;
 const ENROLLMENT_TIMEOUT_MS = 12_000;
 const MODEL_PATH = "/models/facex_tiny.enc";
 
@@ -113,6 +113,7 @@ export class MediaPipeOnnxFaceRecognitionProvider implements FaceRecognitionProv
   async enroll(
     video: HTMLVideoElement,
     onProgress?: (progress: number) => void,
+    signal?: AbortSignal,
   ): Promise<number[]> {
     this.requireSession();
     const samples: number[][] = [];
@@ -120,6 +121,7 @@ export class MediaPipeOnnxFaceRecognitionProvider implements FaceRecognitionProv
 
     while (
       !this.disposed &&
+      !signal?.aborted &&
       samples.length < ENROLLMENT_SAMPLE_COUNT &&
       performance.now() < deadline
     ) {
@@ -131,9 +133,12 @@ export class MediaPipeOnnxFaceRecognitionProvider implements FaceRecognitionProv
         samples.push(embedding);
         onProgress?.(samples.length / ENROLLMENT_SAMPLE_COUNT);
       }
-      await wait(FACE_DETECTION_INTERVAL_MS);
+      if (samples.length < ENROLLMENT_SAMPLE_COUNT)
+        await wait(FACE_ENROLLMENT_INTERVAL_MS);
     }
 
+    if (signal?.aborted)
+      throw new DOMException("Enrollment cancelled", "AbortError");
     if (samples.length < ENROLLMENT_SAMPLE_COUNT) {
       throw new Error(
         "Face enrollment timed out. Keep one well-lit face centered in the frame.",

@@ -1,8 +1,26 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { FACE_MODEL, type IdentityCandidate } from "@kitchen/shared";
+import {
+  FACE_MODEL,
+  type IdentityCandidate,
+  type Evidence,
+} from "@kitchen/shared";
 import { MediaPipeOnnxFaceRecognitionProvider } from "./vision/MediaPipeOnnxFaceRecognitionProvider";
 import { PredictionStabilizer } from "./vision/predictionStabilizer";
+import { FACE_RECOGNITION_INTERVAL_MS } from "./vision/config";
 import { command, presence, roomMeta } from "./network";
+
+export type EnrollmentPhase =
+  "idle" | "loading" | "sampling" | "saving" | "complete" | "error";
+interface RecognitionSession {
+  provider: MediaPipeOnnxFaceRecognitionProvider;
+  ready: Promise<void>;
+  inference: Promise<unknown> | null;
+  enrolling: boolean;
+  cancelled: boolean;
+  stabilizer: PredictionStabilizer;
+  abort: AbortController;
+}
+
 export function useIdentity(
   video: RefObject<HTMLVideoElement | null>,
   enabled: boolean,
@@ -10,143 +28,222 @@ export function useIdentity(
   manual: string | null,
   sessionId: string | null,
 ) {
-  const [locked, setLocked] = useState<string | null>(null),
-    [error, setError] = useState<string | null>(null),
-    [progress, setProgress] = useState<number | null>(null);
-  const [enrolling, setEnrolling] = useState(false);
+  const [locked, setLocked] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [phase, setPhase] = useState<EnrollmentPhase>("idle");
+  const [enrollingPlayerId, setEnrollingPlayerId] = useState<string | null>(
+    null,
+  );
   const candidates = useRef(roster);
   candidates.current = roster;
-  const enrollment = useRef<MediaPipeOnnxFaceRecognitionProvider | null>(null);
-  const active = useRef(true);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-      enrollment.current?.dispose();
-    };
-  }, []);
+  const sessionRef = useRef<RecognitionSession | null>(null);
+  const enrolling =
+    phase === "loading" || phase === "sampling" || phase === "saving";
+
   useEffect(() => {
     setLocked(null);
-    setError(null);
-    enrollment.current?.dispose();
   }, [sessionId]);
   useEffect(() => {
     if (!manual || !sessionId) return;
+    let active = true;
+    const report = (e: Error) => {
+      if (active) setError(e.message);
+    };
     setError(null);
     setLocked(manual);
-    void presence(manual, "manual-debug").catch((e) => setError(e.message));
+    void presence(manual, "manual-debug").catch(report);
     const timer = setInterval(() => {
       if (!document.hidden)
-        void presence(manual, "lock-heartbeat").catch((e) =>
-          setError(e.message),
-        );
+        void presence(manual, "lock-heartbeat").catch(report);
     }, 1000);
-    return () => clearInterval(timer);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [manual, sessionId]);
+
   useEffect(() => {
-    if (!enabled || manual || enrolling || !sessionId) return;
+    setPhase("idle");
+    setProgress(null);
+    setEnrollingPlayerId(null);
+    if (!enabled || manual || !sessionId) return;
     setError(null);
-    const provider = new MediaPipeOnnxFaceRecognitionProvider(),
-      stabilizer = new PredictionStabilizer();
-    let cancelled = false;
-    let timeout = 0;
-    let lastPositive = 0,
-      lastHeartbeat = 0;
+    const provider = new MediaPipeOnnxFaceRecognitionProvider();
+    const session: RecognitionSession = {
+      provider,
+      ready: provider.initialize(),
+      inference: null,
+      enrolling: false,
+      cancelled: false,
+      stabilizer: new PredictionStabilizer(),
+      abort: new AbortController(),
+    };
+    sessionRef.current = session;
+    let timer = 0;
+    let lastPositive = -Infinity;
+    let lastHeartbeat = -Infinity;
+    const report = (e: unknown) => {
+      if (!session.cancelled)
+        setError(e instanceof Error ? e.message : "身份识别失败，请重试。");
+    };
+    const publish = (
+      playerId: string,
+      evidence: Evidence,
+      confidence: number | null = null,
+    ) => {
+      // Network latency must not stall local face inference.
+      void presence(playerId, evidence, confidence).catch(report);
+    };
     const run = async () => {
-      if (cancelled) return;
+      if (session.cancelled) return;
+      const began = performance.now();
       try {
         const v = video.current;
         if (
+          !session.enrolling &&
           v &&
           v.readyState >= 2 &&
           !document.hidden &&
           candidates.current.length
         ) {
-          const match = await provider.identify(
+          const inference = provider.identify(
             v,
             candidates.current.map((c) => ({
               playerId: c.playerId,
               embedding: c.template.vector,
             })),
           );
-          if (cancelled) return;
-          const stable = stabilizer.update(match?.playerId ?? null);
-          setLocked(stable.playerId);
-          const now = performance.now();
-          if (
-            stable.playerId &&
-            match?.playerId === stable.playerId &&
-            (stable.changed || now - lastPositive >= 1000)
-          ) {
-            lastPositive = now;
-            lastHeartbeat = now;
-            await presence(stable.playerId, "positive-match", match.similarity);
-          } else if (stable.playerId && now - lastHeartbeat >= 1000) {
-            lastHeartbeat = now;
-            await presence(stable.playerId, "lock-heartbeat");
+          session.inference = inference;
+          const match = await inference;
+          if (session.cancelled) return;
+          if (!session.enrolling) {
+            const stable = session.stabilizer.update(match?.playerId ?? null);
+            setLocked(stable.playerId);
+            const now = performance.now();
+            if (
+              stable.playerId &&
+              match?.playerId === stable.playerId &&
+              (stable.changed || now - lastPositive >= 1000)
+            ) {
+              lastPositive = now;
+              lastHeartbeat = now;
+              publish(stable.playerId, "positive-match", match.similarity);
+            } else if (stable.playerId && now - lastHeartbeat >= 1000) {
+              lastHeartbeat = now;
+              publish(stable.playerId, "lock-heartbeat");
+            }
           }
         }
       } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "身份识别失败，请重试。");
+        report(e);
+      } finally {
+        // Enrollment owns its inference slot while paused.
+        if (!session.enrolling) session.inference = null;
       }
-      if (!cancelled) timeout = window.setTimeout(run, 250);
+      if (!session.cancelled)
+        timer = window.setTimeout(
+          run,
+          Math.max(
+            0,
+            FACE_RECOGNITION_INTERVAL_MS - (performance.now() - began),
+          ),
+        );
     };
-    void provider
-      .initialize()
+    void session.ready
       .then(() => {
-        if (cancelled) provider.dispose();
-        else void run();
+        if (!session.cancelled) void run();
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message);
+        report(e);
         provider.dispose();
       });
     return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-      provider.dispose();
+      session.cancelled = true;
+      session.abort.abort();
+      clearTimeout(timer);
+      if (sessionRef.current === session) sessionRef.current = null;
+      // Do not release an ONNX session while a frame is still using it.
+      if (session.inference)
+        void session.inference.then(
+          () => provider.dispose(),
+          () => provider.dispose(),
+        );
+      else provider.dispose();
     };
-  }, [enabled, manual, enrolling, sessionId, video]);
+  }, [enabled, manual, sessionId, video]);
+
   useEffect(() => {
+    let active = true;
     if (!enabled && !manual) {
       setLocked(null);
-      void presence(null, "cleared").catch((error) => setError(error.message));
+      void presence(null, "cleared").catch((e) => {
+        if (active) setError(e.message);
+      });
     }
+    return () => {
+      active = false;
+    };
   }, [enabled, manual]);
+
   async function enroll(playerId: string) {
-    if (!video.current || video.current.readyState < 2) {
+    const session = sessionRef.current;
+    const v = video.current;
+    if (!session || !v || v.readyState < 2) {
       setError("请先开启摄像头，等待画面出现。");
       return;
     }
-    setEnrolling(true);
+    if (session.enrolling) return;
+    const payload = { ...roomMeta(), playerId };
+    session.enrolling = true;
+    setEnrollingPlayerId(playerId);
+    setPhase("loading");
     setProgress(0);
     setError(null);
-    const provider = new MediaPipeOnnxFaceRecognitionProvider();
-    enrollment.current = provider;
     try {
-      await provider.initialize();
-      if (!active.current) return;
-      const vector = await provider.enroll(video.current, (p) => {
-        if (active.current) setProgress(p);
+      await session.ready;
+      await session.inference;
+      if (session.cancelled) return;
+      setPhase("sampling");
+      const inference = session.provider.enroll(
+        v,
+        (value) => {
+          if (!session.cancelled) setProgress(value);
+        },
+        session.abort.signal,
+      );
+      session.inference = inference;
+      const vector = await inference;
+      session.inference = null;
+      if (session.cancelled) return;
+      setProgress(1);
+      setPhase("saving");
+      await command("player:enroll", {
+        ...payload,
+        template: { ...FACE_MODEL, vector },
       });
-      if (active.current)
-        await command("player:enroll", {
-          ...roomMeta(),
-          playerId,
-          template: { ...FACE_MODEL, vector },
-        });
-    } catch (e) {
-      if (active.current)
-        setError(e instanceof Error ? e.message : "录脸失败。");
-    } finally {
-      provider.dispose();
-      enrollment.current = null;
-      if (active.current) {
-        setEnrolling(false);
-        setProgress(null);
+      if (!session.cancelled) {
+        session.stabilizer.reset();
+        setLocked(null);
+        setPhase("complete");
       }
+    } catch (e) {
+      if (!session.cancelled) {
+        setError(e instanceof Error ? e.message : "录脸失败。");
+        setPhase("error");
+      }
+    } finally {
+      session.enrolling = false;
+      session.inference = null;
     }
   }
-  return { locked: manual ?? locked, error, progress, enrolling, enroll };
+  return {
+    locked: manual ?? locked,
+    error,
+    progress,
+    phase,
+    enrollingPlayerId,
+    enrolling,
+    enroll,
+  };
 }

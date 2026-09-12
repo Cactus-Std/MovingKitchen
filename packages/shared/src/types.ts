@@ -83,7 +83,7 @@ export interface RoomState {
   hostDeviceId: string;
   players: Player[];
   connectedDeviceIds: string[];
-  stationByDevice: Record<string, StationId>;
+  stationByDevice: Partial<Record<string, StationId>>;
   presenceByDevice: Record<string, DevicePresence>;
   controlLeaseByPlayer: Record<string, ControlLease | undefined>;
   kitchen: KitchenState;
@@ -140,12 +140,9 @@ export interface RoomCommand extends CommandMeta {
 }
 export interface CreateRoomPayload extends CommandMeta {
   deviceId: string;
-  stationId: StationId;
   debugMode: boolean;
 }
-export interface JoinRoomPayload extends RoomCommand {
-  stationId: StationId;
-}
+export type JoinRoomPayload = RoomCommand;
 export interface KitchenActionPayload extends RoomCommand {
   actionId: string;
   expectedRevision: number;

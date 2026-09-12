@@ -5,6 +5,7 @@ export interface FaceRecognitionProvider {
   enroll(
     video: HTMLVideoElement,
     onProgress?: (progress: number) => void,
+    signal?: AbortSignal,
   ): Promise<number[]>;
   identify(
     video: HTMLVideoElement,

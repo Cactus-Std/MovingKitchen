@@ -6,7 +6,6 @@ import type {
   RoomState,
   IdentityCandidate,
   CommandMeta,
-  StationId,
   KitchenAction,
   Evidence,
 } from "@kitchen/shared";
@@ -40,9 +39,7 @@ export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
 );
 const saved = () => {
   const value = sessionStorage.getItem("kitchen-room");
-  return value
-    ? (JSON.parse(value) as { code: string; station: StationId })
-    : null;
+  return value ? (JSON.parse(value) as { code: string }) : null;
 };
 function applyRoom(room: RoomState) {
   if (
@@ -55,7 +52,6 @@ function applyRoom(room: RoomState) {
     "kitchen-room",
     JSON.stringify({
       code: room.code,
-      station: room.stationByDevice[deviceId],
     }),
   );
 }
@@ -92,21 +88,19 @@ export const roomMeta = () => {
   if (!state.room) throw new Error("请先加入房间。");
   return { ...meta(), roomCode: state.room.code, deviceId };
 };
-export async function createRoom(station: StationId, debugMode: boolean) {
+export async function createRoom(debugMode: boolean) {
   await command("room:create", {
     ...meta(),
     deviceId,
-    stationId: station,
     debugMode,
   });
   update({ ready: true });
 }
-export async function joinRoom(code: string, station: StationId) {
+export async function joinRoom(code: string) {
   await command("room:join", {
     ...meta(),
     deviceId,
     roomCode: code.trim().toUpperCase(),
-    stationId: station,
   });
   update({ ready: true });
 }
@@ -133,9 +127,11 @@ export async function kitchenAction(
   actionId: string = crypto.randomUUID(),
 ): Promise<void> {
   if (!state.room || !state.ready) throw new Error("等待厨房重新连接。");
+  const stationId = state.room.stationByDevice[deviceId];
+  if (!stationId) throw new Error("请先在准备室选择这台电脑的工位。");
   const payload = {
     ...roomMeta(),
-    stationId: state.room.stationByDevice[deviceId],
+    stationId,
     actionId,
     expectedRevision: state.room.kitchen.revision,
     action,
@@ -159,7 +155,7 @@ socket.on("connect", () => {
   update({ connected: true, error: null });
   const previous = saved();
   if (previous)
-    void joinRoom(previous.code, previous.station)
+    void joinRoom(previous.code)
       .then(() => command("state:resync", roomMeta()))
       .catch((error) => update({ ready: false, error: error.message }));
 });

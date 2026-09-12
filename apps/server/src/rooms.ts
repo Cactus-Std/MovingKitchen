@@ -25,6 +25,8 @@ interface Entry {
   actions: Map<string, string>;
   requests: Map<string, string>;
   lastAction: Map<string, number>;
+  changedAtRevision: Map<string, number>;
+  roundRevision: number;
   tickAt: number;
   emptyAt: number | null;
 }
@@ -39,18 +41,12 @@ export class Rooms {
     check(entry, "ROOM_NOT_FOUND", "房间不存在，可能已随服务器重启关闭。");
     return entry;
   }
-  create(
-    device: string,
-    socket: string,
-    station: StationId,
-    debugMode: boolean,
-  ): RoomState {
+  create(device: string, socket: string, debugMode: boolean): RoomState {
     check(
       !debugMode || this.allowDebug,
       "NOT_AUTHORIZED",
       "服务器未开启手动测试模式。",
     );
-    this.validStation(station);
     let code = generateRoomCode();
     while (this.entries.has(code)) code = generateRoomCode();
     const now = this.clock();
@@ -59,7 +55,7 @@ export class Rooms {
       hostDeviceId: device,
       players: [],
       connectedDeviceIds: [device],
-      stationByDevice: { [device]: station },
+      stationByDevice: {},
       presenceByDevice: {},
       controlLeaseByPlayer: {},
       kitchen: newKitchen(),
@@ -73,20 +69,31 @@ export class Rooms {
       actions: new Map(),
       requests: new Map(),
       lastAction: new Map(),
+      changedAtRevision: new Map(),
+      roundRevision: 0,
       tickAt: now,
       emptyAt: null,
     });
     return state;
   }
-  join(
-    code: string,
-    device: string,
-    socket: string,
-    station: StationId,
-  ): RoomState {
+  join(code: string, device: string, socket: string): RoomState {
     check(isValidRoomCode(code), "INVALID_REQUEST", "请输入四位房间码。");
     const e = this.get(code);
-    this.bind(e, device, station);
+    check(
+      e.sockets.has(device) || e.sockets.size < 4,
+      "ROOM_FULL",
+      "房间最多连接四台电脑。",
+    );
+    const station = e.state.stationByDevice[device];
+    if (
+      station &&
+      Object.entries(e.state.stationByDevice).some(
+        ([id, assigned]) =>
+          id !== device && assigned === station && e.sockets.has(id),
+      )
+    ) {
+      delete e.state.stationByDevice[device];
+    }
     const sockets = e.sockets.get(device) ?? new Set();
     sockets.add(socket);
     e.sockets.set(device, sockets);
@@ -212,6 +219,11 @@ export class Rooms {
       "正式模式需要四位厨师；测试模式可单人体验。",
     );
     check(
+      r.connectedDeviceIds.every((id) => r.stationByDevice[id]),
+      "INVALID_STATION",
+      "请先为房间内每台电脑分配工位。",
+    );
+    check(
       r.debugMode ||
         (r.players.every((p) => p.enrolled) &&
           r.connectedDeviceIds.length === 4),
@@ -221,6 +233,8 @@ export class Rooms {
     const revision = r.kitchen.revision + 1;
     r.kitchen = newKitchen(r.players);
     r.kitchen.revision = revision;
+    e.roundRevision = revision;
+    e.changedAtRevision.clear();
     r.kitchen.status = "playing";
     r.kitchen.startedAt = this.clock();
     e.tickAt = this.clock();
@@ -333,6 +347,7 @@ export class Rooms {
       );
       return r;
     }
+    this.validStation(payload.stationId);
     check(
       r.stationByDevice[payload.deviceId] === payload.stationId,
       "INVALID_STATION",
@@ -352,8 +367,19 @@ export class Rooms {
       "CONTROL_LEASE_MOVED",
       "这位厨师已移动到另一台电脑。",
     );
+    // Other stations and clock ticks may advance the snapshot without conflicting.
+    const resources = [
+      `player:${presence.lockedPlayerId}`,
+      `station:${payload.stationId}`,
+    ];
     check(
-      payload.expectedRevision === r.kitchen.revision,
+      payload.expectedRevision <= r.kitchen.revision &&
+        payload.expectedRevision >= e.roundRevision &&
+        resources.every(
+          (key) =>
+            (e.changedAtRevision.get(key) ?? e.roundRevision) <=
+            payload.expectedRevision,
+        ),
       "REVISION_CONFLICT",
       "厨房状态已更新，请重试。",
     );
@@ -376,6 +402,8 @@ export class Rooms {
       now,
     );
     e.lastAction.set(payload.deviceId, now);
+    for (const key of resources)
+      e.changedAtRevision.set(key, r.kitchen.revision);
     e.actions.set(key, fingerprint);
     return r;
   }

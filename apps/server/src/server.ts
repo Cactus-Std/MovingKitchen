@@ -184,12 +184,7 @@ export function createGameServer(
       "room:create",
       (p) => {
         check(!socket.data.roomCode, "INVALID_REQUEST", "请先退出当前房间。");
-        const r = rooms.create(
-          p.deviceId,
-          socket.id,
-          p.stationId,
-          p.debugMode === true,
-        );
+        const r = rooms.create(p.deviceId, socket.id, p.debugMode === true);
         socket.data = { roomCode: r.code, deviceId: p.deviceId };
         socket.join(r.code);
         return r;
@@ -206,7 +201,7 @@ export function createGameServer(
           "INVALID_REQUEST",
           "请先退出当前房间。",
         );
-        const r = rooms.join(p.roomCode, p.deviceId, socket.id, p.stationId);
+        const r = rooms.join(p.roomCode, p.deviceId, socket.id);
         socket.data = { roomCode: r.code, deviceId: p.deviceId };
         socket.join(r.code);
         socket.emit("identity:roster", rooms.get(r.code).roster);
@@ -229,7 +224,9 @@ export function createGameServer(
     register("station:select", (p) => {
       const e = rooms.get(p.roomCode);
       check(
-        e.state.debugMode || e.state.kitchen.status === "lobby",
+        e.state.debugMode ||
+          e.state.kitchen.status === "lobby" ||
+          !e.state.stationByDevice[p.deviceId],
         "NOT_AUTHORIZED",
         "游戏中工位固定，请移动到另一台电脑。",
       );

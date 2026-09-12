@@ -50,7 +50,7 @@ flowchart LR
 5. 玩家携带物绑定 `playerId`，不能绑定 laptop、socket 或 scene。
 6. Shared event/type definitions 只有一份，前后端从同一个 package import。
 7. Vision provider 与 React UI 解耦；换模型不能要求重写游戏页面。
-8. 每台控制用 laptop 在 join 时绑定一个 `StationId`；server 校验 action 的 station 与该 device binding 一致。重复 station 只能用于显式 spectator/debug mode。
+8. laptop 创建／加入房间时暂不绑定工位，加入后通过 `station:select` 选择一个 `StationId`；未分配工位不能开始操作，server 校验 action 的 station 与该 device binding 一致。当前每个工位只接受一台连接中的电脑。
 
 ## 3. 参考项目中应迁移的模块
 
@@ -237,7 +237,7 @@ export interface RoomState {
   hostDeviceId: DeviceId;
   players: Player[];
   connectedDeviceIds: DeviceId[];
-  stationByDevice: Record<DeviceId, StationId>;
+  stationByDevice: Partial<Record<DeviceId, StationId>>;
   presenceByDevice: Record<DeviceId, DevicePresence>;
   controlLeaseByPlayer: Record<PlayerId, PlayerControlLease | undefined>;
   kitchen: KitchenState;
@@ -306,7 +306,7 @@ function acceptFaceTemplate(upload: FaceTemplateUpload): FaceTemplate {
 
 当前经过游戏体验调整的 baseline：
 
-- detection attempt：每 250 ms，约 4 Hz；
+- detection attempt：以 100 ms（最高约 10 Hz）为起始间隔，扣除本次推理耗时且不重叠运行；presence 的网络 ACK 不阻塞本地识别；
 - detection confidence：0.5；
 - gameplay 最小 face width：约 video width 的 8%；
 - cosine match threshold：0.62；
@@ -317,6 +317,8 @@ function acceptFaceTemplate(upload: FaceTemplateUpload): FaceTemplate {
 - 离开 room、显式 reset 或 recognition lifecycle teardown 时清除。
 
 这些参数必须通过目标 camera、灯光、玩家人群测试校准，不能被视为通用 biometric threshold。
+
+录脸保留 10 个样本和 250 ms 采样间隔，使用与识别共享的模型实例；录脸期间暂停识别，完成后复用模型继续推理。UI 显示 loading / sampling / saving / complete 进度，退出时取消采样并释放模型。
 
 ## 6. Presence、sticky lock 与 active-device lease
 
@@ -384,10 +386,15 @@ export type CommandAck<T> =
 
 export interface CreateRoomPayload extends CommandMeta {
   deviceId: DeviceId;
-  stationId: StationId;
+  debugMode: boolean;
 }
 
 export interface JoinRoomPayload extends CommandMeta {
+  roomCode: RoomCode;
+  deviceId: DeviceId;
+}
+
+export interface SelectStationPayload extends CommandMeta {
   roomCode: RoomCode;
   deviceId: DeviceId;
   stationId: StationId;
@@ -460,6 +467,10 @@ Typed event maps：
 
 ```ts
 export interface ClientToServerEvents {
+  "station:select": (
+    payload: SelectStationPayload,
+    ack: (result: CommandAck<RoomState>) => void,
+  ) => void;
   "room:create": (
     payload: CreateRoomPayload,
     ack: (result: CommandAck<RoomState>) => void,
@@ -536,11 +547,13 @@ export interface ServerToClientEvents {
 6. lockedPlayerId exists and is enrolled?
 7. device owns that player's active control lease?
 8. actionId has not already been applied?
-9. expectedRevision equals canonical kitchen revision?
+9. expectedRevision is within this round and current revision, and the acting player/station have not changed since it?
 10. player/item/station/action invariants pass?
 11. apply one atomic transition and increment revision?
 12. ack sender and broadcast canonical state/patch?
 ```
+
+全局 revision 继续用于快照排序；计时更新或其他玩家在其他工位的动作不构成当前动作冲突。服务器记录玩家／工位最后修改的 revision，仅拒绝相关资源已变化、来自旧轮次或未来版本的请求，随后仍检查当前食材、携带槽与工位规则。这样四台电脑可以并行工作，同一工位的竞争操作仍串行校验。
 
 必须由 server 验证的 gameplay invariants 包括：
 

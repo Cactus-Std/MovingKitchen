@@ -40,6 +40,7 @@ import {
   toolImages,
 } from "./gameView";
 import { TomatoWash } from "./TomatoWash";
+import { EnrollmentProgress } from "./EnrollmentProgress";
 
 function Art({ item }: { item: Item }) {
   return toolImages[item.kind] ? (
@@ -60,8 +61,7 @@ export function App() {
   const net = useNetwork(),
     room = net.room,
     k = room?.kitchen;
-  const [stationChoice, setStationChoice] = useState<StationId>("storage-sink"),
-    [code, setCode] = useState(""),
+  const [code, setCode] = useState(""),
     [debugMode, setDebugMode] = useState(false);
   const [name, setName] = useState(""),
     [selected, setSelected] = useState<string | null>(null),
@@ -81,20 +81,22 @@ export function App() {
     room?.debugMode ? manual : null,
     room?.code ?? null,
   );
-  const station = room?.stationByDevice[deviceId] ?? stationChoice;
+  const station = room?.stationByDevice[deviceId];
   const playerId = identity.locked;
   const player = room?.players.find((p) => p.id === playerId);
   const lease = playerId ? room?.controlLeaseByPlayer[playerId] : undefined;
   const canAct =
     !!room &&
+    !!station &&
     !!playerId &&
     lease?.deviceId === deviceId &&
     net.ready &&
     k?.status === "playing";
   const held = k?.items[k.playerCarry[playerId ?? ""] ?? ""];
-  const game = room
-    ? gameTargets(room, station, held)
-    : { targets: [], actionTarget: null };
+  const game =
+    room && station
+      ? gameTargets(room, station, held)
+      : { targets: [], actionTarget: null };
   const latest = useRef({ canAct, game, held, station });
   latest.current = { canAct, game, held, station };
   async function run(fn: () => Promise<unknown>) {
@@ -148,7 +150,7 @@ export function App() {
     context: {
       contextId: room ? `${room.code}:${k?.startedAt}` : "home",
       playerId: canAct ? playerId : null,
-      sceneId: station,
+      sceneId: station ?? "unassigned",
       held: held ? heldInput(held) : null,
       actionTarget: game.actionTarget,
       pending,
@@ -248,7 +250,10 @@ export function App() {
       delete window.advanceTime;
     };
   });
-  const boardItem = k?.items[k.stations[station].occupiedItemId ?? ""];
+  const boardItem =
+    k && station
+      ? k.items[k.stations[station].occupiedItemId ?? ""]
+      : undefined;
   const error = message ?? net.error ?? identity.error ?? input.error;
   const connection = (
     <span className={`connection ${net.connected ? "online" : ""}`}>
@@ -262,7 +267,6 @@ export function App() {
       void run(() =>
         command("station:select", { ...roomMeta(), stationId: value }),
       );
-    else setStationChoice(value);
   };
   return (
     <main className={room ? "kitchen-app" : "welcome-app"}>
@@ -277,20 +281,6 @@ export function App() {
             </h1>
             <p className="tagline">带着食材，跑进队友的厨房。</p>
             <div className="entry">
-              <label>
-                这台电脑的工位
-                <select
-                  aria-label="工位"
-                  value={stationChoice}
-                  onChange={(e) => changeStation(e.target.value as StationId)}
-                >
-                  {STATIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {stationLabels[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label className="check">
                 <input
                   type="checkbox"
@@ -302,16 +292,14 @@ export function App() {
               <button
                 className="primary"
                 disabled={busy || !net.connected}
-                onClick={() =>
-                  void run(() => createRoom(stationChoice, debugMode))
-                }
+                onClick={() => void run(() => createRoom(debugMode))}
               >
                 创建厨房 <span>↗</span>
               </button>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void run(() => joinRoom(code, stationChoice));
+                  void run(() => joinRoom(code));
                 }}
               >
                 <input
@@ -346,7 +334,16 @@ export function App() {
             <nav>
               {STATIONS.map((s) => (
                 <button
-                  disabled={busy || (!room.debugMode && k?.status !== "lobby")}
+                  disabled={
+                    busy ||
+                    (!room.debugMode && k?.status !== "lobby" && !!station) ||
+                    Object.entries(room.stationByDevice).some(
+                      ([id, st]) =>
+                        id !== deviceId &&
+                        st === s &&
+                        room.connectedDeviceIds.includes(id),
+                    )
+                  }
                   className={station === s ? "active" : ""}
                   key={s}
                   onClick={() => changeStation(s)}
@@ -378,7 +375,7 @@ export function App() {
               退出
             </button>
           </header>
-          {k?.status === "lobby" ? (
+          {k?.status === "lobby" || !station ? (
             <section className="lobby">
               <div className="lobby-copy">
                 <p className="eyebrow">先认个脸，再一起开饭</p>
@@ -386,11 +383,41 @@ export function App() {
                 <p>
                   分享房间码 <b>{room.code}</b>，每台电脑选择一个工位。
                 </p>
+                <label className="station-assignment">
+                  这台电脑的工位
+                  <select
+                    aria-label="工位"
+                    value={station ?? ""}
+                    disabled={busy}
+                    onChange={(e) => changeStation(e.target.value as StationId)}
+                  >
+                    <option value="" disabled>
+                      加入成功，请选择工位
+                    </option>
+                    {STATIONS.map((s) => {
+                      const occupied = Object.entries(
+                        room.stationByDevice,
+                      ).some(
+                        ([id, st]) =>
+                          id !== deviceId &&
+                          st === s &&
+                          room.connectedDeviceIds.includes(id),
+                      );
+                      return (
+                        <option key={s} value={s} disabled={occupied}>
+                          {stationLabels[s]}
+                          {occupied ? " · 已有电脑" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
                 <div className="players">
                   {room.players.map((p) => (
                     <button
                       key={p.id}
                       className={`player ${selected === p.id ? "selected" : ""}`}
+                      disabled={identity.enrolling}
                       onClick={() => setSelected(p.id)}
                       style={{ "--chef": p.color } as CSSProperties}
                     >
@@ -439,9 +466,17 @@ export function App() {
                   onClick={() => selected && void identity.enroll(selected)}
                 >
                   {identity.enrolling
-                    ? `采集样本 ${Math.round((identity.progress ?? 0) * 10)}/10`
+                    ? "正在录入人脸…"
                     : "同意并录入选中厨师的人脸"}
                 </button>
+                <EnrollmentProgress
+                  phase={
+                    identity.enrollingPlayerId === selected
+                      ? identity.phase
+                      : "idle"
+                  }
+                  progress={identity.progress}
+                />
                 <div className="lobby-start">
                   <span>
                     {room.connectedDeviceIds.length}/4 台电脑 ·{" "}
@@ -454,7 +489,10 @@ export function App() {
                       busy ||
                       identity.enrolling ||
                       room.hostDeviceId !== deviceId ||
-                      !room.players.length
+                      !room.players.length ||
+                      !room.connectedDeviceIds.every(
+                        (id) => room.stationByDevice[id],
+                      )
                     }
                     onClick={() =>
                       void run(() => command("game:start", roomMeta()))
@@ -702,7 +740,7 @@ export function App() {
             </>
           )}
           <aside
-            className={`camera-panel ${k?.status === "lobby" ? "camera-lobby" : ""}`}
+            className={`camera-panel ${k?.status === "lobby" || !station ? "camera-lobby" : ""}`}
           >
             <video
               ref={(node) => {
@@ -741,9 +779,7 @@ export function App() {
           {!net.ready && room && net.connected && (
             <div className="reconnect">
               <p>房间尚未恢复。若服务器已重启，请重新创建厨房。</p>
-              <button
-                onClick={() => void run(() => joinRoom(room.code, station))}
-              >
+              <button onClick={() => void run(() => joinRoom(room.code))}>
                 重连房间
               </button>
               <button onClick={forgetRoom}>返回首页</button>

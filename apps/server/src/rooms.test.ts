@@ -9,8 +9,10 @@ import { Rooms } from "./rooms.js";
 function rig() {
   let now = 1000;
   const rooms = new Rooms(true, () => now);
-  const room = rooms.create("one", "s1", "storage-sink", true);
-  rooms.join(room.code, "two", "s2", "board-1");
+  const room = rooms.create("one", "s1", true);
+  rooms.join(room.code, "two", "s2");
+  rooms.bind(rooms.get(room.code), "one", "storage-sink");
+  rooms.bind(rooms.get(room.code), "two", "board-1");
   rooms.add(room.code, "Alice", "red");
   const player = room.players[0].id;
   rooms.start(room.code, "one");
@@ -75,18 +77,19 @@ describe("identity ownership and recovery", () => {
   });
   it("retains presence until the last tab disconnects and preserves item on reconnect", () => {
     const { rooms, room, player, action } = rig();
-    rooms.join(room.code, "one", "s1b", "storage-sink");
+    rooms.join(room.code, "one", "s1b");
     rooms.action(action());
     rooms.leave(room.code, "one", "s1");
     expect(room.controlLeaseByPlayer[player]).toBeDefined();
     rooms.leave(room.code, "one", "s1b");
     expect(room.controlLeaseByPlayer[player]).toBeUndefined();
-    rooms.join(room.code, "one", "new", "storage-sink");
+    rooms.join(room.code, "one", "new");
+    expect(room.stationByDevice.one).toBe("storage-sink");
     expect(room.kitchen.playerCarry[player]).not.toBeNull();
   });
   it("validates enrollment metadata and never includes embeddings in room state", () => {
     const rooms = new Rooms(true);
-    const room = rooms.create("one", "s", "storage-sink", true);
+    const room = rooms.create("one", "s", true);
     rooms.add(room.code, "Alice", "red");
     const player = room.players[0].id;
     const template = {
@@ -105,12 +108,42 @@ describe("identity ownership and recovery", () => {
   });
   it("reserves one laptop per station and requires a fully enrolled real room", () => {
     const rooms = new Rooms();
-    expect(() => rooms.create("d", "s", "storage-sink", true)).toThrow();
-    const room = rooms.create("d", "s", "storage-sink", false);
-    expect(() => rooms.join(room.code, "other", "s2", "storage-sink")).toThrow(
-      "已经",
-    );
+    expect(() => rooms.create("d", "s", true)).toThrow();
+    const room = rooms.create("d", "s", false);
+    rooms.join(room.code, "other", "s2");
+    rooms.bind(rooms.get(room.code), "d", "storage-sink");
+    expect(() =>
+      rooms.bind(rooms.get(room.code), "other", "storage-sink"),
+    ).toThrow("已经");
     rooms.add(room.code, "A", "red");
     expect(() => rooms.start(room.code, "d")).toThrow("四位");
+  });
+  it("joins before station selection and requires assignment before starting", () => {
+    const rooms = new Rooms(true);
+    const room = rooms.create("a", "s", true);
+    rooms.join(room.code, "b", "t");
+    expect(room.connectedDeviceIds).toEqual(["a", "b"]);
+    expect(room.stationByDevice).toEqual({});
+    rooms.add(room.code, "Chef", "red");
+    expect(() => rooms.start(room.code, "a")).toThrow("分配工位");
+    rooms.bind(rooms.get(room.code), "a", "storage-sink");
+    rooms.bind(rooms.get(room.code), "b", "board-1");
+    rooms.start(room.code, "a");
+    expect(room.kitchen.status).toBe("playing");
+  });
+  it("keeps one player per device without releasing other devices controls", () => {
+    const other = new Rooms(true);
+    const r = other.create("a", "a", true);
+    other.join(r.code, "b", "b");
+    other.add(r.code, "A", "red");
+    other.add(r.code, "B", "blue");
+    other.add(r.code, "C", "green");
+    other.presence(r.code, "a", r.players[0].id, null, "manual-debug");
+    other.presence(r.code, "b", r.players[1].id, null, "manual-debug");
+    expect(Object.keys(r.controlLeaseByPlayer)).toHaveLength(2);
+    other.presence(r.code, "a", r.players[2].id, null, "manual-debug");
+    expect(r.controlLeaseByPlayer[r.players[0].id]).toBeUndefined();
+    expect(r.controlLeaseByPlayer[r.players[1].id]?.deviceId).toBe("b");
+    expect(r.controlLeaseByPlayer[r.players[2].id]?.deviceId).toBe("a");
   });
 });

@@ -69,24 +69,58 @@ try {
   }
   const [sink, board1, board2, oven] = pages;
   await shot(sink, "home");
+  assert.equal(
+    await sink.getByLabel("工位", { exact: true }).count(),
+    0,
+    "No station assignment before joining",
+  );
   await sink.getByRole("checkbox").check();
   await sink.getByRole("button", { name: /创建厨房/ }).click();
-  for (const name of ["Alice", "Bob"]) {
+  for (const name of ["Alice", "Bob", "Charlie", "Dana"]) {
     await sink.getByRole("textbox", { name: "厨师名字" }).fill(name);
     await sink.getByRole("button", { name: "＋ 添加厨师" }).click();
     await sink.getByRole("button", { name: new RegExp(name) }).waitFor();
   }
   const code = (await state(sink)).room;
+  assert.equal((await state(sink)).station, undefined);
+  await sink.getByLabel("工位", { exact: true }).selectOption("storage-sink");
   for (let i = 1; i < 4; i++) {
-    await pages[i]
-      .getByLabel("工位", { exact: true })
-      .selectOption(["storage-sink", "board-1", "board-2", "oven-pass"][i]);
     await pages[i].getByRole("textbox", { name: "房间码" }).fill(code);
     await pages[i].getByRole("button", { name: "加入", exact: true }).click();
     await pages[i].getByRole("heading", { name: "厨师集合。" }).waitFor();
+    assert.equal((await state(pages[i])).station, undefined);
+    await pages[i]
+      .getByLabel("工位", { exact: true })
+      .selectOption(["storage-sink", "board-1", "board-2", "oven-pass"][i]);
   }
   await shot(sink, "lobby");
   await sink.getByRole("button", { name: "开饭！", exact: true }).click();
+  await Promise.all(
+    pages.map((page, i) =>
+      choose(page, ["Alice", "Bob", "Charlie", "Dana"][i]),
+    ),
+  );
+  await Promise.all(
+    pages.map((page, i) =>
+      target(page, ["faucet", "tool-knife", "tool-knife", "tool-oven-mitt"][i]),
+    ),
+  );
+  const parallel = await Promise.all(pages.map(state));
+  assert(
+    parallel.every((s) => s.control),
+    "Every station must retain its own player control",
+  );
+  assert.equal(parallel[0].kitchen.faucetOn, true);
+  assert.deepEqual(
+    parallel.slice(1).map((s) => s.held?.kind),
+    ["knife", "knife", "oven-mitt"],
+  );
+  await shot(board1, "parallel-stations");
+  await Promise.all(
+    pages.map((page, i) =>
+      target(page, ["faucet", "tool-knife", "tool-knife", "tool-oven-mitt"][i]),
+    ),
+  );
   await choose(sink, "Alice");
   await target(sink, "food-tomato");
   await wait(
@@ -116,7 +150,10 @@ try {
     }
   }
   await shot(sink, "wash-clean");
-  await target(sink, "faucet");
+  await sink.waitForTimeout(250);
+  // The same hover used to rotate can legitimately pick up a newly clean tomato.
+  if ((await state(sink)).held?.id === tomatoId) await target(sink, "work");
+  if ((await state(sink)).kitchen.faucetOn) await target(sink, "faucet");
   await target(sink, "work");
   assert.equal((await state(sink)).held.id, tomatoId);
   await choose(board1, "Alice");
