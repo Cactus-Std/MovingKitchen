@@ -31,3 +31,23 @@ reference/multiplayer-identification-prototype/
 5. 若要独立运行仓库内的快照，在该目录执行 `npm install`，然后参考其中的 README。快照刻意不包含 `node_modules`、`dist`、`.env.local` 和生成的 MediaPipe/ONNX Runtime WASM；安装脚本会重新生成所需 runtime assets。
 
 这份代码是 implementation reference，不是 MovingKitchen 最终架构的强制依赖。最终游戏可以采用不同 UI、state model、部署拓扑或 gameplay events，但应保留 shared typed contracts、authoritative server、local-only camera processing、identity/presence trust boundary 和跨设备控制权唯一性等核心方法论。
+
+## Web UI 与玩法交互原型
+
+仓库还包含当前可独立运行的游戏界面参考快照：
+
+```text
+reference/web-ui-prototype/
+```
+
+该目录包含完整的 Vite/Three.js 源码、锁文件、场景背景、annotated 坐标图和透明工具素材，可用于参考：
+
+- Create/Join Room 与四人 Lobby 布局；
+- 摄像头预览和录脸 UI 流程；
+- 四个厨房场景的视觉布局与交互热区；
+- 鼠标模拟手势、绿色悬停圆环、工具和单物品携带；
+- 3D 番茄清洗、切菜、垃圾桶、有限水量和烤箱流程。
+
+运行方式、当前范围和已知缺口见 [`reference/web-ui-prototype/README.md`](./reference/web-ui-prototype/README.md)。
+
+此目录是 **implementation/UX reference**，不是正式架构或强制依赖。最终开发可以迁移其中的素材、坐标或玩法代码，也可以采用完全不同的 React/TypeScript 结构。正式代码不应通过相对路径依赖 reference 目录。多人状态、人脸 embedding、presence 与 server authorization 应以 [`MULTIPLAYER_IDENTITY_INTEGRATION.md`](./MULTIPLAYER_IDENTITY_INTEGRATION.md) 和 `reference/multiplayer-identification-prototype/` 为基线。

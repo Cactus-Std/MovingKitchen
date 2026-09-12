@@ -5,6 +5,8 @@
 > 参考实现：[Cactus-Std/multiplayer-identification](https://github.com/Cactus-Std/multiplayer-identification)  
 > 与玩法规则的关系：玩法以 [`SPEC.md`](./SPEC.md) 为准；本文负责 multiplayer transport、玩家添加、人脸 enrollment、identity lock、presence 与 server authorization。
 
+UI 与玩法交互参考位于 [`reference/web-ui-prototype/`](./reference/web-ui-prototype/)。该原型目前使用 `localStorage`/`BroadcastChannel` 和模拟 enrollment；正式整合时应保留其体验与素材价值，但用本文定义的 typed Socket.IO commands、canonical state、真实 enrollment 和 presence lifecycle 替换本地模拟逻辑。
+
 ## 1. 已验证能力与接入结论
 
 `multiplayer-identification` prototype 已端到端验证：
