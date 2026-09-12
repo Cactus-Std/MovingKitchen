@@ -382,16 +382,20 @@ export function applyKitchenAction(
       state.oven.status = "served";
       break;
     }
-    case "SLICE_PIZZA":
+    case "SLICE_PIZZA": {
       stationIs("oven-pass");
       tool("pizza-cutter");
+      const pizza = state.items[area.occupiedItemId ?? ""];
       check(
-        state.items[area.occupiedItemId ?? ""]?.kind === "pizza",
+        pizza?.kind === "pizza",
         "INVALID_ITEM_STATE",
         "先用隔热手套将 Pizza 取到托盘。",
       );
-      finish(state, "served");
+      check(pizza.cutProgress < 100, "INVALID_ITEM_STATE", "Pizza 已经切好了。");
+      pizza.cutProgress = Math.min(100, pizza.cutProgress + 20);
+      if (pizza.cutProgress === 100) finish(state, "served");
       break;
+    }
     default:
       check(false, "INVALID_REQUEST", "未知厨房动作。");
   }

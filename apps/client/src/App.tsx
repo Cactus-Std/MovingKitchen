@@ -140,6 +140,9 @@ export function App() {
   const net = useNetwork(),
     room = net.room,
     k = room?.kitchen;
+  const resultPreview = new URLSearchParams(window.location.search).has(
+    "resultPreview",
+  );
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE),
     [code, setCode] = useState(""),
     [debugMode, setDebugMode] = useState(false);
@@ -1143,6 +1146,13 @@ export function App() {
               <button onClick={forgetRoom}>
                 {text(language, "Back to home", "返回首页")}
               </button>
+            </div>
+          )}
+          {resultPreview && (
+            <div className="modal-backdrop result-preview-backdrop">
+              <div className="result-preview-pizza">
+                <img src="/assets/tools/pizza-plate.png" alt="Result pizza preview" />
+              </div>
             </div>
           )}
           {k?.status === "finished" && (

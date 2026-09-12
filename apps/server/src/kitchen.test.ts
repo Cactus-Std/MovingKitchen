@@ -68,6 +68,12 @@ describe("authoritative kitchen", () => {
     expect(state.playerCarry.chef).toBe("oven-pass:oven-mitt");
     act("oven-pass", { type: "RETURN_TOOL" });
     act("oven-pass", { type: "PICKUP_ITEM", itemId: "oven-pass:pizza-cutter" });
+    for (let i = 0; i < 4; i++)
+      act("oven-pass", { type: "SLICE_PIZZA" });
+    expect(state.status).toBe("playing");
+    expect(
+      state.items[state.stations["oven-pass"].occupiedItemId!].cutProgress,
+    ).toBe(80);
     act("oven-pass", { type: "SLICE_PIZZA" });
     expect(state.status).toBe("finished");
     expect(state.finishedReason).toBe("served");

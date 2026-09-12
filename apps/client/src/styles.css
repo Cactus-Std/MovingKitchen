@@ -659,6 +659,41 @@ label {
   background: #36814e;
   animation: ready 0.65s infinite alternate;
 }
+.oven-pizza {
+  position: absolute;
+  left: 63%;
+  top: 42%;
+  width: 25.5%;
+  height: 24%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.oven-pizza > img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 7px #0006);
+  transition: opacity 0.35s ease;
+}
+.oven-progress {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -10%;
+  height: 13px;
+  overflow: hidden;
+  border: 3px solid #51351f;
+  border-radius: 999px;
+  background: #fff8df;
+}
+.oven-progress i {
+  display: block;
+  height: 100%;
+  background: #46b66e;
+  transition: width 0.35s linear;
+}
 .hand {
   position: absolute;
   z-index: 10;
@@ -676,9 +711,9 @@ label {
   transform: translate(-40%, -40%);
 }
 .carried > .tool-art-knife {
-  width: 165px;
-  height: 145px;
-  transform: translate(-38%, -42%);
+  width: 260px;
+  height: 220px;
+  transform: translate(-36%, -44%);
 }
 .carried > .food-art {
   width: 150px;
@@ -852,6 +887,29 @@ label {
   font-size: 76px;
   animation: ready 1s infinite alternate;
 }
+.result-preview-backdrop {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: url("/assets/backgrounds/moving-kitchen-results-screen-tall-rating.png")
+    center / 100% 100% no-repeat;
+  backdrop-filter: none;
+}
+.result-preview-pizza {
+  position: absolute;
+  left: 9.9%;
+  top: 60.8%;
+  width: 18.75%;
+  height: 25.5%;
+  display: grid;
+  place-items: center;
+}
+.result-preview-pizza img {
+  width: 125%;
+  height: 125%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 10px #5a2b1766);
+}
 .results h1,
 .guide h1 {
   font-size: 38px;
@@ -887,6 +945,88 @@ label {
   display: block;
   width: 100%;
   margin: 15px 0;
+}
+.result-backdrop {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: url("/assets/backgrounds/moving-kitchen-results-screen-tall-rating.png")
+    center/100% 100% no-repeat;
+  backdrop-filter: none;
+}
+.result-backdrop .results {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  animation: none;
+}
+.result-backdrop .result-art {
+  position: absolute;
+  left: 9.9%;
+  top: 60.8%;
+  width: 18.75%;
+  height: 25.5%;
+  display: grid;
+  place-items: center;
+  font-size: clamp(52px, 7vw, 120px);
+  opacity: 0;
+  animation: resultPizzaIn 1.15s 0.25s ease-out forwards;
+}
+.result-backdrop .result-art img {
+  width: 125%;
+  height: 125%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 10px #5a2b1766);
+}
+.result-copy {
+  position: absolute;
+  left: 68.4%;
+  top: 19.4%;
+  width: 23.65%;
+  height: 61.5%;
+  padding: 7% 7% 4%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: resultCopyIn 0.65s 1.05s ease-out forwards;
+}
+.result-copy .score {
+  font-size: clamp(42px, 5vw, 78px);
+}
+.result-copy .result-stats {
+  gap: 10px;
+  margin: 12px 0 16px;
+  flex-wrap: wrap;
+}
+.result-copy .result-stats span {
+  flex: 1 1 28%;
+}
+.result-copy > button {
+  padding: 8px 10px;
+}
+@keyframes resultPizzaIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes resultCopyIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .guide {
   text-align: left;
