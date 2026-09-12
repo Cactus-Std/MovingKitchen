@@ -1,0 +1,215 @@
+import { chromium } from "playwright";
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+const url = process.env.KITCHEN_TEST_URL ?? "http://localhost:5180";
+const output = process.env.KITCHEN_TEST_OUTPUT;
+if (output) await mkdir(output, { recursive: true });
+const browser = await chromium.launch({
+  channel: process.env.PLAYWRIGHT_CHANNEL ?? "chrome",
+  headless: true,
+  args: [
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader",
+  ],
+});
+const errors = [];
+const pages = [];
+const state = (page) =>
+  page.evaluate(() => JSON.parse(window.render_game_to_text()));
+const shot = async (page, name) => {
+  await page.mouse.move(5, 80);
+  if (output)
+    await page.screenshot({
+      path: resolve(output, `${name}.png`),
+      fullPage: true,
+      animations: "disabled",
+    });
+};
+const wait = async (page, predicate) => {
+  await page.waitForFunction(predicate, null, { timeout: 15000 });
+};
+const click = async (page, locator) => {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await locator.click();
+    await page.mouse.move(5, 80);
+    await page.waitForTimeout(250);
+    if (
+      !(await page.getByRole("alert").allTextContents()).some((text) =>
+        text.includes("厨房状态已更新"),
+      )
+    )
+      return;
+  }
+  throw Error("Repeated revision conflicts");
+};
+const target = async (page, id) =>
+  click(page, page.locator(`[data-target="${id}"]`));
+const choose = async (page, name) => {
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}( · 接管)?$`) })
+    .click();
+  await wait(page, () => JSON.parse(window.render_game_to_text()).control);
+};
+try {
+  for (let i = 0; i < 4; i++) {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+    });
+    const page = await context.newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error" && !msg.text().includes("favicon"))
+        errors.push(msg.text());
+    });
+    await page.goto(url);
+    await page.getByRole("button", { name: /创建厨房/ }).waitFor();
+    pages.push(page);
+  }
+  const [sink, board1, board2, oven] = pages;
+  await shot(sink, "home");
+  await sink.getByRole("checkbox").check();
+  await sink.getByRole("button", { name: /创建厨房/ }).click();
+  for (const name of ["Alice", "Bob"]) {
+    await sink.getByRole("textbox", { name: "厨师名字" }).fill(name);
+    await sink.getByRole("button", { name: "＋ 添加厨师" }).click();
+    await sink.getByRole("button", { name: new RegExp(name) }).waitFor();
+  }
+  const code = (await state(sink)).room;
+  for (let i = 1; i < 4; i++) {
+    await pages[i]
+      .getByLabel("工位", { exact: true })
+      .selectOption(["storage-sink", "board-1", "board-2", "oven-pass"][i]);
+    await pages[i].getByRole("textbox", { name: "房间码" }).fill(code);
+    await pages[i].getByRole("button", { name: "加入", exact: true }).click();
+    await pages[i].getByRole("heading", { name: "厨师集合。" }).waitFor();
+  }
+  await shot(sink, "lobby");
+  await sink.getByRole("button", { name: "开饭！", exact: true }).click();
+  await choose(sink, "Alice");
+  await target(sink, "food-tomato");
+  await wait(
+    sink,
+    () => JSON.parse(window.render_game_to_text()).held?.kind === "tomato",
+  );
+  const tomatoId = (await state(sink)).held.id;
+  await target(sink, "work");
+  await target(sink, "faucet");
+  await shot(sink, "wash-start");
+  const bounds = await sink.locator(".stage").boundingBox();
+  for (let n = 0; n < 1000; n++) {
+    const x = 0.73 + 0.205 * Math.sin(n * 0.12),
+      y = 0.62 + 0.14 * Math.sin(n * 0.073);
+    await sink.mouse.move(
+      bounds.x + x * bounds.width,
+      bounds.y + y * bounds.height,
+    );
+    await sink.waitForTimeout(40);
+    if (n % 20 === 0) {
+      const s = await state(sink);
+      if (s.kitchen.items[tomatoId].cleanliness >= 92) break;
+      if (n >= 980)
+        throw Error(
+          `Tomato did not wash: ${s.kitchen.items[tomatoId].cleanliness}%`,
+        );
+    }
+  }
+  await shot(sink, "wash-clean");
+  await target(sink, "faucet");
+  await target(sink, "work");
+  assert.equal((await state(sink)).held.id, tomatoId);
+  await choose(board1, "Alice");
+  await wait(sink, () => !JSON.parse(window.render_game_to_text()).control);
+  assert.equal((await state(board1)).held.id, tomatoId);
+  await target(board1, "work");
+  await target(board1, "tool-knife");
+  for (let n = 0; n < 5; n++)
+    await click(board1, board1.getByRole("button", { name: "模拟切一次" }));
+  await shot(board1, "chopped");
+  await target(board1, "tool-knife");
+  await target(board1, "work");
+  await choose(oven, "Alice");
+  await target(oven, "oven");
+  await choose(sink, "Bob");
+  await target(sink, "food-sausage");
+  assert.equal((await state(sink)).held?.kind, "sausage");
+  await choose(board2, "Bob");
+  await target(board2, "work");
+  await target(board2, "tool-knife");
+  for (let n = 0; n < 5; n++)
+    await click(board2, board2.getByRole("button", { name: "模拟切一次" }));
+  await target(board2, "tool-knife");
+  await target(board2, "work");
+  await choose(oven, "Bob");
+  await target(oven, "oven");
+  await choose(sink, "Alice");
+  await target(sink, "food-dough");
+  await click(sink, sink.getByRole("button", { name: "模拟双手展开" }));
+  await wait(
+    sink,
+    () => JSON.parse(window.render_game_to_text()).held?.stretched,
+  );
+  await choose(oven, "Alice");
+  await target(oven, "oven");
+  await choose(sink, "Bob");
+  await target(sink, "food-cheese");
+  await choose(oven, "Bob");
+  await target(oven, "oven");
+  await shot(oven, "baking");
+  await oven.reload();
+  await wait(oven, () => JSON.parse(window.render_game_to_text()).ready);
+  await choose(oven, "Bob");
+  await target(oven, "tool-oven-mitt");
+  await oven.waitForFunction(
+    () =>
+      JSON.parse(window.render_game_to_text()).kitchen.oven.status === "ready",
+    null,
+    { timeout: 25000 },
+  );
+  await target(oven, "oven");
+  await target(oven, "tool-oven-mitt");
+  await target(oven, "tool-pizza-cutter");
+  await oven.getByRole("button", { name: "模拟切一次" }).click();
+  await oven.getByRole("heading", { name: "开饭啦！" }).waitFor();
+  await shot(oven, "served");
+  for (const page of pages) {
+    const s = await state(page);
+    assert.equal(s.kitchen.finishedReason, "served");
+    assert(s.kitchen.score > 1000);
+  }
+  await sink.getByRole("button", { name: "再开一单" }).click();
+  await wait(
+    sink,
+    () => JSON.parse(window.render_game_to_text()).mode === "playing",
+  );
+  assert.equal((await state(sink)).kitchen.waste.total, 0);
+  const mobile = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  await mobile.goto(url);
+  await shot(mobile, "mobile-home");
+  assert(
+    await mobile.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  assert.deepEqual(errors, []);
+  console.log(
+    "PASS: four browser contexts, local 3D wash, roaming carry, two cutting boards, dough stretch, oven, slicing, reconnect, restart, mobile layout.",
+  );
+} catch (error) {
+  for (let i = 0; i < pages.length; i++) {
+    await shot(pages[i], `failure-${i}`);
+    console.error(
+      JSON.stringify({
+        page: i,
+        state: await state(pages[i]),
+        alerts: await pages[i].getByRole("alert").allTextContents(),
+      }),
+    );
+  }
+  throw error;
+} finally {
+  await browser.close();
+}

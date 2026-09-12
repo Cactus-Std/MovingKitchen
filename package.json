@@ -1,0 +1,42 @@
+{
+  "name": "moving-kitchen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @kitchen/shared && concurrently -k -n shared,server,client \"npm run dev -w @kitchen/shared\" \"npm run dev -w @kitchen/server\" \"npm run dev -w @kitchen/client\"",
+    "dev:client": "npm run build -w @kitchen/shared && npm run dev -w @kitchen/client",
+    "dev:server": "npm run build -w @kitchen/shared && npm run dev -w @kitchen/server",
+    "build": "npm run build -w @kitchen/shared && npm run build -w @kitchen/server && npm run build -w @kitchen/client",
+    "start": "node scripts/start.mjs",
+    "test": "npm run build -w @kitchen/shared && vitest run",
+    "typecheck": "npm run build -w @kitchen/shared && npm run typecheck --workspaces --if-present",
+    "lint": "eslint apps packages scripts",
+    "postinstall": "node scripts/copy-runtime-assets.mjs",
+    "model:check": "node scripts/check-face-model.mjs",
+    "test:browser": "node scripts/smoke-browser.mjs",
+    "test:camera": "node scripts/smoke-camera.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.58.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

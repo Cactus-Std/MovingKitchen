@@ -1,0 +1,191 @@
+import { useSyncExternalStore } from "react";
+import { io, type Socket } from "socket.io-client";
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  RoomState,
+  IdentityCandidate,
+  CommandMeta,
+  StationId,
+  KitchenAction,
+  Evidence,
+} from "@kitchen/shared";
+type State = {
+  room: RoomState | null;
+  roster: IdentityCandidate[];
+  connected: boolean;
+  ready: boolean;
+  error: string | null;
+};
+let state: State = {
+  room: null,
+  roster: [],
+  connected: false,
+  ready: false,
+  error: null,
+};
+const listeners = new Set<() => void>();
+const update = (patch: Partial<State>) => {
+  state = { ...state, ...patch };
+  listeners.forEach((fn) => fn());
+};
+export const deviceId = (() => {
+  const id = sessionStorage.getItem("kitchen-device") ?? crypto.randomUUID();
+  sessionStorage.setItem("kitchen-device", id);
+  return id;
+})();
+export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
+  import.meta.env.VITE_SERVER_URL || undefined,
+  { autoConnect: false, reconnectionDelay: 500, reconnectionDelayMax: 4000 },
+);
+const saved = () => {
+  const value = sessionStorage.getItem("kitchen-room");
+  return value
+    ? (JSON.parse(value) as { code: string; station: StationId })
+    : null;
+};
+function applyRoom(room: RoomState) {
+  if (
+    state.room?.code === room.code &&
+    state.room.kitchen.revision > room.kitchen.revision
+  )
+    return;
+  update({ room });
+  sessionStorage.setItem(
+    "kitchen-room",
+    JSON.stringify({
+      code: room.code,
+      station: room.stationByDevice[deviceId],
+    }),
+  );
+}
+export const meta = (): CommandMeta => ({
+  protocolVersion: 1,
+  requestId: crypto.randomUUID(),
+});
+type Payload<E extends keyof ClientToServerEvents> = Parameters<
+  ClientToServerEvents[E]
+>[0];
+type Result<E extends keyof ClientToServerEvents> = Parameters<
+  Parameters<ClientToServerEvents[E]>[1]
+>[0];
+export async function command<E extends keyof ClientToServerEvents>(
+  event: E,
+  payload: Payload<E>,
+): Promise<Result<E>> {
+  if (!socket.connected) throw new Error("服务器连接已断开，请等待重新连接。");
+  const emit = socket.timeout(5000).emitWithAck.bind(socket) as <
+    T extends keyof ClientToServerEvents,
+  >(
+    event: T,
+    payload: Payload<T>,
+  ) => Promise<Result<T>>;
+  const result = await emit(event, payload);
+  if (!result.ok) {
+    update({ error: result.error.message });
+    throw new Error(result.error.message);
+  }
+  if (result.data) applyRoom(result.data);
+  return result;
+}
+export const roomMeta = () => {
+  if (!state.room) throw new Error("请先加入房间。");
+  return { ...meta(), roomCode: state.room.code, deviceId };
+};
+export async function createRoom(station: StationId, debugMode: boolean) {
+  await command("room:create", {
+    ...meta(),
+    deviceId,
+    stationId: station,
+    debugMode,
+  });
+  update({ ready: true });
+}
+export async function joinRoom(code: string, station: StationId) {
+  await command("room:join", {
+    ...meta(),
+    deviceId,
+    roomCode: code.trim().toUpperCase(),
+    stationId: station,
+  });
+  update({ ready: true });
+}
+export async function leaveRoom() {
+  await command("room:leave", roomMeta());
+  sessionStorage.removeItem("kitchen-room");
+  update({ room: null, roster: [], ready: false });
+}
+export async function presence(
+  playerId: string | null,
+  evidence: Evidence,
+  confidence: number | null = null,
+) {
+  if (state.ready)
+    await command("identity:presence", {
+      ...roomMeta(),
+      playerId,
+      evidence,
+      confidence,
+    });
+}
+export async function kitchenAction(
+  action: KitchenAction,
+  actionId: string = crypto.randomUUID(),
+): Promise<void> {
+  if (!state.room || !state.ready) throw new Error("等待厨房重新连接。");
+  const payload = {
+    ...roomMeta(),
+    stationId: state.room.stationByDevice[deviceId],
+    actionId,
+    expectedRevision: state.room.kitchen.revision,
+    action,
+  };
+  // A transport timeout is uncertain: retry exactly the same action, never a new ID.
+  try {
+    await command("kitchen:action", payload);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "operation has timed out" &&
+      socket.connected
+    ) {
+      await command("kitchen:action", payload);
+      return;
+    }
+    throw error;
+  }
+}
+socket.on("connect", () => {
+  update({ connected: true, error: null });
+  const previous = saved();
+  if (previous)
+    void joinRoom(previous.code, previous.station)
+      .then(() => command("state:resync", roomMeta()))
+      .catch((error) => update({ ready: false, error: error.message }));
+});
+socket.on("disconnect", () => update({ connected: false, ready: false }));
+socket.on("connect_error", () =>
+  update({
+    connected: false,
+    ready: false,
+    error: "连接不到厨房服务器，请检查网络。",
+  }),
+);
+socket.on("room:state", applyRoom);
+socket.on("identity:roster", (roster) => update({ roster }));
+export function clearError() {
+  update({ error: null });
+}
+export function forgetRoom() {
+  sessionStorage.removeItem("kitchen-room");
+  update({ room: null, roster: [], ready: false, error: null });
+}
+export function useNetwork() {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => state,
+  );
+}

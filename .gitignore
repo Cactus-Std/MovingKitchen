@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+apps/client/public/mediapipe/
+apps/client/public/models/wasm/
+apps/client/public/onnxruntime/
