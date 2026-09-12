@@ -11,6 +11,7 @@ import {
 } from "./vision/predictionStabilizer";
 import { FACE_RECOGNITION_INTERVAL_MS } from "./vision/config";
 import { command, presence, roomMeta } from "./network";
+import { runtimeErrorText, text, type Language } from "./i18n";
 
 export type EnrollmentPhase =
   "idle" | "loading" | "sampling" | "saving" | "complete" | "error";
@@ -30,6 +31,7 @@ export function useIdentity(
   roster: IdentityCandidate[],
   manual: string | null,
   sessionId: string | null,
+  language: Language = "zh",
 ) {
   const [locked, setLocked] = useState<string | null>(null);
   const [absent, setAbsent] = useState(false);
@@ -98,7 +100,15 @@ export function useIdentity(
     let lastVideoTime: number | null = null;
     const report = (e: unknown) => {
       if (!session.cancelled)
-        setError(e instanceof Error ? e.message : "身份识别失败，请重试。");
+        setError(
+          e instanceof Error
+            ? runtimeErrorText(language, e.message)
+            : text(
+                language,
+                "Face recognition failed. Please try again.",
+                "身份识别失败，请重试。",
+              ),
+        );
     };
     const publish = (
       playerId: string | null,
@@ -207,7 +217,7 @@ export function useIdentity(
         );
       else provider.dispose();
     };
-  }, [enabled, manual, sessionId, video]);
+  }, [enabled, manual, sessionId, video, language]);
 
   useEffect(() => {
     let active = true;
@@ -228,7 +238,13 @@ export function useIdentity(
     const session = sessionRef.current;
     const v = video.current;
     if (!session || !v || v.readyState < 2) {
-      setError("请先开启摄像头，等待画面出现。");
+      setError(
+        text(
+          language,
+          "Turn on the camera and wait for the video to appear first.",
+          "请先开启摄像头，等待画面出现。",
+        ),
+      );
       return;
     }
     if (session.enrolling) return;
@@ -272,7 +288,11 @@ export function useIdentity(
       }
     } catch (e) {
       if (!session.cancelled) {
-        setError(e instanceof Error ? e.message : "录脸失败。");
+        setError(
+          e instanceof Error
+            ? runtimeErrorText(language, e.message)
+            : text(language, "Face enrollment failed.", "录脸失败。"),
+        );
         setPhase("error");
       }
     } finally {

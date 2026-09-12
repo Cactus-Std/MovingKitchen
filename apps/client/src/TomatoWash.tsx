@@ -2,16 +2,19 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import type { Item } from "@kitchen/shared";
 import type { PoseSample } from "./input/contracts";
+import { text, type Language } from "./i18n";
 export function TomatoWash({
   item,
   waterOn,
   pose,
   onWash,
+  language = "zh",
 }: {
   item: Item;
   waterOn: boolean;
   pose: MutableRefObject<PoseSample | null>;
   onWash: (patches: number[]) => Promise<void>;
+  language?: Language;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const latest = useRef({ item, waterOn, onWash });
@@ -153,7 +156,11 @@ export function TomatoWash({
     <div
       className="tomato-canvas"
       ref={container}
-      aria-label={`番茄清洁度 ${item.cleanliness}%`}
+      aria-label={text(
+        language,
+        `Tomato cleanliness ${item.cleanliness}%`,
+        `番茄清洁度 ${item.cleanliness}%`,
+      )}
     />
   );
 }

@@ -5,14 +5,17 @@ import {
   type CameraAssets,
 } from "./camera";
 import type { Frame, Hand, InputStatus } from "./types";
+import { text, type Language } from "../i18n";
 
 interface Options {
   cameraOn: boolean;
+  language?: Language;
   assets?: CameraAssets;
   onFrame(frame: Frame): void;
   onTrackingReset(): void;
 }
 export function useHandCamera(options: Options) {
+  const language = options.language ?? "zh";
   const videoRef = useRef<HTMLVideoElement>(null);
   const latest = useRef(options);
   latest.current = options;
@@ -38,7 +41,13 @@ export function useHandCamera(options: Options) {
     }
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       setStatus("error");
-      setError("摄像头需要 localhost 或 HTTPS。请使用本机开发地址打开。");
+      setError(
+        text(
+          language,
+          "Camera access requires localhost or HTTPS. Open the app from a secure address.",
+          "摄像头需要 localhost 或 HTTPS。请使用本机开发地址打开。",
+        ),
+      );
       return;
     }
     const video = videoRef.current;
@@ -66,6 +75,8 @@ export function useHandCamera(options: Options) {
         },
       },
       { wasmRoot, modelAssetPath },
+      undefined,
+      language,
     );
     const onVisibility = () => latest.current.onTrackingReset();
     document.addEventListener("visibilitychange", onVisibility);
@@ -74,7 +85,7 @@ export function useHandCamera(options: Options) {
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [options.cameraOn, wasmRoot, modelAssetPath, attempt]);
+  }, [options.cameraOn, wasmRoot, modelAssetPath, attempt, language]);
   return {
     videoRef,
     status,

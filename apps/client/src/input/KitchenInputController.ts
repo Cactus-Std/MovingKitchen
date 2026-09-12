@@ -10,6 +10,7 @@ import {
   type KitchenIntent,
   type Rect,
 } from "./contracts";
+import { text, type Language } from "../i18n";
 
 export function contextKey(context: InputContext): string {
   const held = context.held;
@@ -30,28 +31,57 @@ export function contextKey(context: InputContext): string {
 export function targetReason(
   target: InteractionTarget,
   context: InputContext,
+  language: Language = "zh",
 ): string | null {
-  if (!context.playerId) return "等待宿主识别玩家身份";
+  if (!context.playerId)
+    return text(
+      language,
+      "Waiting for the kitchen to identify a chef",
+      "等待宿主识别玩家身份",
+    );
   if (
     context.held?.kind === "tool" &&
     context.held.homeSceneId !== context.sceneId
   )
-    return "工具属于其他工位，需要宿主归还工具";
-  if (!target.allowed) return target.reason ?? "当前区域不可用";
-  if (target.kind === "pickup" && context.held) return "请先放下手中的物品";
-  if (target.kind === "place" && !context.held) return "当前是空手";
+    return text(
+      language,
+      "This tool belongs to another station and must be returned there",
+      "工具属于其他工位，需要宿主归还工具",
+    );
+  if (!target.allowed)
+    return (
+      target.reason ??
+      text(language, "This area is unavailable", "当前区域不可用")
+    );
+  if (target.kind === "pickup" && context.held)
+    return text(
+      language,
+      "Put down the item you are carrying first",
+      "请先放下手中的物品",
+    );
+  if (target.kind === "place" && !context.held)
+    return text(language, "Your hands are empty", "当前是空手");
   if (target.kind === "activate" && context.held)
-    return "请先放下物品，再操作开关";
+    return text(
+      language,
+      "Put down your item before using the control",
+      "请先放下物品，再操作开关",
+    );
   if (
     target.kind === "pickup" &&
     target.item.kind === "tool" &&
     target.item.homeSceneId !== context.sceneId
   )
-    return "只能拿取当前工位的工具";
+    return text(
+      language,
+      "You can only pick up tools from this station",
+      "只能拿取当前工位的工具",
+    );
   return null;
 }
 
 export class KitchenInputController {
+  private language: Language;
   private key = "";
   private ownerKey = "";
   private completedTarget: Rect | null = null;
@@ -62,17 +92,30 @@ export class KitchenInputController {
   private handId: string | null = null;
   private detector = new KitchenRecognizer();
   private stretch = new StretchDetector();
-  view: KitchenInputView = {
-    held: null,
-    cursor: null,
-    rotationRad: null,
-    handState: "empty",
-    hoverId: null,
-    hoverLabel: null,
-    progress: 0,
-    valid: false,
-    feedback: "把手移到物品上，保持片刻",
-  };
+  view: KitchenInputView;
+  constructor(language: Language = "zh") {
+    this.language = language;
+    this.detector.setLanguage(language);
+    this.view = {
+      held: null,
+      cursor: null,
+      rotationRad: null,
+      handState: "empty",
+      hoverId: null,
+      hoverLabel: null,
+      progress: 0,
+      valid: false,
+      feedback: text(
+        language,
+        "Move your hand over an item and hold",
+        "把手移到物品上，保持片刻",
+      ),
+    };
+  }
+  setLanguage(language: Language) {
+    this.language = language;
+    this.detector.setLanguage(language);
+  }
   resetMotion() {
     this.hovered = null;
     this.consumed = false;
@@ -132,7 +175,7 @@ export class KitchenInputController {
     time: number,
     source: Source,
   ): KitchenIntent | null {
-    const reason = targetReason(target, context);
+    const reason = targetReason(target, context, this.language);
     if (reason || context.pending) return null;
     this.completedTarget = target.bounds;
     const base = this.base(context, time, source);
@@ -164,21 +207,17 @@ export class KitchenInputController {
     };
   }
   private canAct(context: InputContext): boolean {
-    if (
-      !context.playerId ||
-      !context.actionTarget?.allowed ||
-      context.pending
-    )
+    if (!context.playerId || !context.actionTarget?.allowed || context.pending)
       return false;
-    if (context.actionTarget.action === "STRETCH")
-      return context.held === null;
+    if (context.actionTarget.action === "STRETCH") return context.held === null;
     if (context.held?.kind === "tool")
       return (
         context.held.homeSceneId === context.sceneId &&
         ACTIONS[context.held.tool] === context.actionTarget.action
       );
-    return !!context.held && ["KNEAD", "SPRINKLE"].includes(
-      context.actionTarget.action,
+    return (
+      !!context.held &&
+      ["KNEAD", "SPRINKLE"].includes(context.actionTarget.action)
     );
   }
   update(
@@ -196,8 +235,12 @@ export class KitchenInputController {
       this.view.cursor = null;
       this.view.rotationRad = null;
       this.view.feedback = context.held
-        ? "物品仍在携带槽中，等待手部回来"
-        : "请把手放进画面";
+        ? text(
+            this.language,
+            "Your item is safe. Bring your hand back into view",
+            "物品仍在携带槽中，等待手部回来",
+          )
+        : text(this.language, "Bring your hand into view", "请把手放进画面");
       return null;
     }
     if (
@@ -215,14 +258,22 @@ export class KitchenInputController {
     if (!enabled || !context.playerId) {
       this.resetMotion();
       this.view.feedback = !context.playerId
-        ? "等待宿主识别玩家身份"
-        : "交互已暂停";
+        ? text(
+            this.language,
+            "Waiting for the kitchen to identify a chef",
+            "等待宿主识别玩家身份",
+          )
+        : text(this.language, "Interaction paused", "交互已暂停");
       return null;
     }
     if (context.pending) {
       this.detector.suspend();
       this.stretch.reset();
-      this.view.feedback = "等待宿主确认";
+      this.view.feedback = text(
+        this.language,
+        "Waiting for the kitchen to confirm",
+        "等待宿主确认",
+      );
       return null;
     }
     if (this.completedTarget) {
@@ -235,7 +286,11 @@ export class KitchenInputController {
       ) {
         this.view.progress = 0;
         this.view.valid = false;
-        this.view.feedback = "先移出这个区域，再进行下一次操作";
+        this.view.feedback = text(
+          this.language,
+          "Move out of this area before the next action",
+          "先移出这个区域，再进行下一次操作",
+        );
         return null;
       }
       this.completedTarget = null;
@@ -274,7 +329,7 @@ export class KitchenInputController {
     if (hit) {
       this.detector.suspend();
       this.stretch.reset();
-      const reason = targetReason(hit, context);
+      const reason = targetReason(hit, context, this.language);
       if (reason) {
         this.hovered = null;
         this.consumed = false;
@@ -298,8 +353,16 @@ export class KitchenInputController {
         (frame.time - this.enteredAt) / duration,
       );
       this.view.feedback = this.consumed
-        ? "等待物品状态更新"
-        : `${hit.label} · 保持位置确认`;
+        ? text(
+            this.language,
+            "Waiting for the item to update",
+            "等待物品状态更新",
+          )
+        : text(
+            this.language,
+            `${hit.label} · Hold to confirm`,
+            `${hit.label} · 保持位置确认`,
+          );
       if (this.view.progress === 1 && !this.consumed) {
         this.consumed = true;
         return this.confirm(hit, context, frame.time, source);
@@ -309,8 +372,16 @@ export class KitchenInputController {
     this.hovered = null;
     this.consumed = false;
     this.view.feedback = context.held
-      ? "移动到有效区域放下，或执行当前动作"
-      : "悬停在物品上约0.8秒拿取";
+      ? text(
+          this.language,
+          "Move to a valid area to place it, or perform its action",
+          "移动到有效区域放下，或执行当前动作",
+        )
+      : text(
+          this.language,
+          "Hover over an item for about 0.8 seconds to pick it up",
+          "悬停在物品上约0.8秒拿取",
+        );
     if (
       !this.canAct(context) ||
       (context.actionTarget?.zoneId && !inActionZone)
@@ -318,13 +389,25 @@ export class KitchenInputController {
       this.detector.suspend();
       this.stretch.reset();
       if (context.actionTarget?.zoneId && context.actionTarget.allowed)
-        this.view.feedback = "将工具移到指定菜板区域再操作";
+        this.view.feedback = text(
+          this.language,
+          "Move the tool onto the cutting board to use it",
+          "将工具移到指定菜板区域再操作",
+        );
       return null;
     }
     this.view.feedback =
       context.actionTarget!.action === "STRETCH"
-        ? "双手靠近，再向两侧展开"
-        : "执行当前物品对应的动作";
+        ? text(
+            this.language,
+            "Bring both hands together, then stretch them apart",
+            "双手靠近，再向两侧展开",
+          )
+        : text(
+            this.language,
+            "Perform the action for the current item",
+            "执行当前物品对应的动作",
+          );
     if (context.actionTarget!.action === "STRETCH") {
       const metrics = this.stretch.update(frame);
       if (metrics)

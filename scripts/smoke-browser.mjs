@@ -37,7 +37,7 @@ const click = async (page, locator) => {
     await page.waitForTimeout(250);
     if (
       !(await page.getByRole("alert").allTextContents()).some((text) =>
-        text.includes("厨房状态已更新"),
+        text.includes("The kitchen changed"),
       )
     )
       return;
@@ -48,7 +48,7 @@ const target = async (page, id) =>
   click(page, page.locator(`[data-target="${id}"]`));
 const choose = async (page, name) => {
   await page
-    .getByRole("button", { name: new RegExp(`^${name}( · 接管)?$`) })
+    .getByRole("button", { name: new RegExp(`^${name}( · Take control)?$`) })
     .click();
   await page.waitForFunction((name) => {
     const s = JSON.parse(window.render_game_to_text());
@@ -67,37 +67,46 @@ try {
         errors.push(msg.text());
     });
     await page.goto(url);
-    await page.getByRole("button", { name: /创建厨房/ }).waitFor();
+    await page.getByRole("button", { name: /Create kitchen/ }).waitFor();
     pages.push(page);
   }
   const [sink, board1, board2, oven] = pages;
+  assert.equal(
+    await sink.evaluate(() => document.documentElement.lang),
+    "en",
+    "English must be the default language",
+  );
   await shot(sink, "home");
   assert.equal(
-    await sink.getByLabel("工位", { exact: true }).count(),
+    await sink.getByLabel("Station", { exact: true }).count(),
     0,
     "No station assignment before joining",
   );
   await sink.getByRole("checkbox").check();
-  await sink.getByRole("button", { name: /创建厨房/ }).click();
+  await sink.getByRole("button", { name: /Create kitchen/ }).click();
   for (const name of ["Alice", "Bob", "Charlie", "Dana"]) {
-    await sink.getByRole("textbox", { name: "厨师名字" }).fill(name);
-    await sink.getByRole("button", { name: "＋ 添加厨师" }).click();
+    await sink.getByRole("textbox", { name: "Chef name" }).fill(name);
+    await sink.getByRole("button", { name: "+ Add chef" }).click();
     await sink.getByRole("button", { name: new RegExp(name) }).waitFor();
   }
   const code = (await state(sink)).room;
   assert.equal((await state(sink)).station, undefined);
-  await sink.getByLabel("工位", { exact: true }).selectOption("storage-sink");
+  await sink
+    .getByLabel("Station", { exact: true })
+    .selectOption("storage-sink");
   for (let i = 1; i < 4; i++) {
-    await pages[i].getByRole("textbox", { name: "房间码" }).fill(code);
-    await pages[i].getByRole("button", { name: "加入", exact: true }).click();
-    await pages[i].getByRole("heading", { name: "厨师集合。" }).waitFor();
+    await pages[i].getByRole("textbox", { name: "Kitchen code" }).fill(code);
+    await pages[i].getByRole("button", { name: "Join", exact: true }).click();
+    await pages[i].getByRole("heading", { name: "Chefs, assemble." }).waitFor();
     assert.equal((await state(pages[i])).station, undefined);
     await pages[i]
-      .getByLabel("工位", { exact: true })
+      .getByLabel("Station", { exact: true })
       .selectOption(["storage-sink", "board-1", "board-2", "oven-pass"][i]);
   }
   await shot(sink, "lobby");
-  await sink.getByRole("button", { name: "开饭！", exact: true }).click();
+  await sink
+    .getByRole("button", { name: "Start cooking!", exact: true })
+    .click();
   await Promise.all(
     pages.map((page, i) =>
       choose(page, ["Alice", "Bob", "Charlie", "Dana"][i]),
@@ -190,7 +199,10 @@ try {
   await target(board1, "work");
   await target(board1, "tool-knife");
   for (let n = 0; n < 5; n++)
-    await click(board1, board1.getByRole("button", { name: "模拟切一次" }));
+    await click(
+      board1,
+      board1.getByRole("button", { name: "Simulate one chop" }),
+    );
   await shot(board1, "chopped");
   await target(board1, "tool-knife");
   await target(board1, "work");
@@ -203,22 +215,54 @@ try {
   await target(board2, "work");
   await target(board2, "tool-knife");
   for (let n = 0; n < 5; n++)
-    await click(board2, board2.getByRole("button", { name: "模拟切一次" }));
+    await click(
+      board2,
+      board2.getByRole("button", { name: "Simulate one chop" }),
+    );
   await target(board2, "tool-knife");
   await target(board2, "work");
   await choose(oven, "Bob");
   await target(oven, "oven");
+  await choose(board1, "Alice");
+  await target(board1, "tool-cloth");
+  await click(board1, board1.getByRole("button", { name: "Simulate wipe" }));
+  await target(board1, "tool-cloth");
   await choose(sink, "Alice");
   await target(sink, "food-dough");
-  await click(sink, sink.getByRole("button", { name: "模拟双手展开" }));
+  await choose(board1, "Alice");
+  await target(board1, "work");
+  for (let n = 0; n < 4; n++)
+    await click(
+      board1,
+      board1.getByRole("button", { name: "Simulate two-hand stretch" }),
+    );
   await wait(
-    sink,
-    () => JSON.parse(window.render_game_to_text()).held?.stretched,
+    board1,
+    () =>
+      JSON.parse(window.render_game_to_text()).kitchen.items[
+        JSON.parse(window.render_game_to_text()).kitchen.stations["board-1"]
+          .occupiedItemId
+      ]?.stretched,
   );
+  await target(board1, "work");
   await choose(oven, "Alice");
   await target(oven, "oven");
+  await choose(board2, "Bob");
+  await target(board2, "tool-cloth");
+  await click(board2, board2.getByRole("button", { name: "Simulate wipe" }));
+  await target(board2, "tool-cloth");
   await choose(sink, "Bob");
   await target(sink, "food-cheese");
+  await choose(board2, "Bob");
+  await target(board2, "work");
+  await target(board2, "tool-knife");
+  for (let n = 0; n < 5; n++)
+    await click(
+      board2,
+      board2.getByRole("button", { name: "Simulate one chop" }),
+    );
+  await target(board2, "tool-knife");
+  await target(board2, "work");
   await choose(oven, "Bob");
   await target(oven, "oven");
   await shot(oven, "baking");
@@ -235,15 +279,15 @@ try {
   await target(oven, "oven");
   await target(oven, "tool-oven-mitt");
   await target(oven, "tool-pizza-cutter");
-  await oven.getByRole("button", { name: "模拟切一次" }).click();
-  await oven.getByRole("heading", { name: "开饭啦！" }).waitFor();
+  await oven.getByRole("button", { name: "Simulate one chop" }).click();
+  await oven.getByRole("heading", { name: "Order up!" }).waitFor();
   await shot(oven, "served");
   for (const page of pages) {
     const s = await state(page);
     assert.equal(s.kitchen.finishedReason, "served");
     assert(s.kitchen.score > 1000);
   }
-  await sink.getByRole("button", { name: "再开一单" }).click();
+  await sink.getByRole("button", { name: "Cook another" }).click();
   await wait(
     sink,
     () => JSON.parse(window.render_game_to_text()).mode === "playing",

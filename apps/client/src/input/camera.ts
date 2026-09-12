@@ -2,6 +2,7 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { handFeatures } from "./features";
 import { HandTracker } from "./handTracker";
 import type { Frame, Hand, InputStatus } from "./types";
+import { text, type Language } from "../i18n";
 
 export interface CameraAssets {
   wasmRoot: string;
@@ -67,7 +68,10 @@ const dependencies: CameraDependencies = {
   cancelFrame: (id) => cancelAnimationFrame(id),
 };
 
-export function cameraError(error: unknown): {
+export function cameraError(
+  error: unknown,
+  language: Language = "zh",
+): {
   status: InputStatus;
   message: string;
 } {
@@ -76,21 +80,37 @@ export function cameraError(error: unknown): {
   if (name === "NotAllowedError" || name === "SecurityError")
     return {
       status: "denied",
-      message: "摄像头权限未开启。请在地址栏允许摄像头，然后重试。",
+      message: text(
+        language,
+        "Camera access is blocked. Allow camera access in the address bar, then try again.",
+        "摄像头权限未开启。请在地址栏允许摄像头，然后重试。",
+      ),
     };
   if (name === "NotFoundError")
     return {
       status: "error",
-      message: "未找到摄像头。连接摄像头后重试，或打开模拟调试。",
+      message: text(
+        language,
+        "No camera was found. Connect one and try again, or use manual test mode.",
+        "未找到摄像头。连接摄像头后重试，或打开模拟调试。",
+      ),
     };
   if (name === "NotReadableError")
     return {
       status: "error",
-      message: "摄像头可能正被其他应用占用。关闭占用它的应用后重试。",
+      message: text(
+        language,
+        "The camera may be in use by another app. Close that app and try again.",
+        "摄像头可能正被其他应用占用。关闭占用它的应用后重试。",
+      ),
     };
   return {
     status: "error",
-    message: "摄像头或手势模型启动失败。请重试，并确认本地模型资源完整。",
+    message: text(
+      language,
+      "The camera or gesture model could not start. Try again and check the local model files.",
+      "摄像头或手势模型启动失败。请重试，并确认本地模型资源完整。",
+    ),
   };
 }
 
@@ -100,6 +120,7 @@ export function startCamera(
   callbacks: CameraCallbacks,
   assets: CameraAssets = DEFAULT_CAMERA_ASSETS,
   deps = dependencies,
+  language: Language = "zh",
 ): () => void {
   let stopped = false;
   let stream: MediaStream | null = null;
@@ -119,7 +140,7 @@ export function startCamera(
   };
   const fail = (error: unknown) => {
     if (stopped) return;
-    const result = cameraError(error);
+    const result = cameraError(error, language);
     stop();
     callbacks.onStatus(result.status, result.message);
   };

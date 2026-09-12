@@ -77,6 +77,37 @@ label {
   border: 0;
   padding: 8px;
 }
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #c8b394;
+  border-radius: 999px;
+  background: #fff8e8cc;
+}
+.language-toggle button {
+  min-width: 38px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 900;
+}
+.language-toggle button:hover:enabled {
+  transform: none;
+}
+.language-toggle button.active {
+  color: #fff9ec;
+  background: #6e3d25;
+}
+.welcome-language {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 2;
+}
 .eyebrow {
   font-size: 11px;
   letter-spacing: 0.13em;
@@ -228,6 +259,9 @@ label {
 }
 .topbar > .text-button {
   font-size: 12px;
+}
+.topbar > .language-toggle {
+  flex: none;
 }
 .lobby {
   display: flex;
@@ -953,6 +987,10 @@ label {
     font-size: 10px;
     padding: 8px;
   }
+  .topbar > .language-toggle button {
+    min-width: 32px;
+    padding: 5px 7px;
+  }
   .topbar nav small {
     display: none;
   }
@@ -991,6 +1029,10 @@ label {
   }
   .welcome-copy {
     margin-left: 6vw;
+  }
+  .welcome-language {
+    top: 16px;
+    right: 16px;
   }
   .welcome:before {
     background: linear-gradient(

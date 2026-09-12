@@ -12,24 +12,35 @@ import type {
   KitchenIntent,
   Rect,
 } from "./input/contracts";
-export const stationLabels: Record<StationId, string> = {
-  "storage-sink": "储物与水池",
-  "board-1": "1 号菜板",
-  "board-2": "2 号菜板",
-  "oven-pass": "烤箱与出餐",
-};
-export const labels: Record<Item["kind"], string> = {
-  tomato: "番茄",
-  sausage: "香肠",
-  cheese: "芝士",
-  dough: "面饼",
-  knife: "菜刀",
-  cloth: "抹布",
-  whisk: "打蛋器",
-  "oven-mitt": "隔热手套",
-  "pizza-cutter": "披萨刀",
-  pizza: "Pizza",
-};
+import { DEFAULT_LANGUAGE, text, type Language } from "./i18n";
+
+export function getStationLabels(
+  language: Language,
+): Record<StationId, string> {
+  return {
+    "storage-sink": text(language, "Storage & sink", "储物与水池"),
+    "board-1": text(language, "Cutting board 1", "1 号菜板"),
+    "board-2": text(language, "Cutting board 2", "2 号菜板"),
+    "oven-pass": text(language, "Oven & pass", "烤箱与出餐"),
+  };
+}
+
+export function getItemLabels(
+  language: Language,
+): Record<Item["kind"], string> {
+  return {
+    tomato: text(language, "Tomato", "番茄"),
+    sausage: text(language, "Sausage", "香肠"),
+    cheese: text(language, "Cheese", "芝士"),
+    dough: text(language, "Dough", "面饼"),
+    knife: text(language, "Knife", "菜刀"),
+    cloth: text(language, "Cloth", "抹布"),
+    whisk: text(language, "Whisk", "打蛋器"),
+    "oven-mitt": text(language, "Oven mitt", "隔热手套"),
+    "pizza-cutter": text(language, "Pizza cutter", "披萨刀"),
+    pizza: "Pizza",
+  };
+}
 export const emoji: Partial<Record<Item["kind"], string>> = {
   tomato: "🍅",
   sausage: "🌭",
@@ -44,7 +55,11 @@ export const toolImages: Record<string, string> = {
   "oven-mitt": "oven-mitt",
   "pizza-cutter": "pizza-cutter",
 };
-export function heldInput(item: Item): HeldItem {
+export function heldInput(
+  item: Item,
+  language: Language = DEFAULT_LANGUAGE,
+): HeldItem {
+  const labels = getItemLabels(language);
   return item.homeStation
     ? {
         id: item.id,
@@ -74,7 +89,9 @@ export function gameTargets(
   room: RoomState,
   station: StationId,
   held: Item | undefined,
+  language: Language = DEFAULT_LANGUAGE,
 ): { targets: Target[]; actionTarget: ActionTarget | null } {
+  const labels = getItemLabels(language);
   const k = room.kitchen,
     area = k.stations[station],
     onBoard = k.items[area.occupiedItemId ?? ""];
@@ -92,7 +109,7 @@ export function gameTargets(
     const common = { id, label, bounds, allowed, reason };
     const input: InteractionTarget =
       item && !held
-        ? { ...common, kind: "pickup", item: heldInput(item) }
+        ? { ...common, kind: "pickup", item: heldInput(item, language) }
         : { ...common, kind: held ? "place" : "activate" };
     targets.push({ input, action, visual, item });
   }
@@ -100,7 +117,7 @@ export function gameTargets(
     FOODS.forEach((kind, i) =>
       target(
         `food-${kind}`,
-        `拿取${labels[kind]}`,
+        text(language, `Pick up ${labels[kind]}`, `拿取${labels[kind]}`),
         rect(
           0.047 + (i % 2) * 0.18,
           0.08 + Math.floor(i / 2) * 0.215,
@@ -111,26 +128,40 @@ export function gameTargets(
         "food",
         { id: `storage:${kind}`, kind } as Item,
         !held,
-        "请先放下物品。",
+        text(
+          language,
+          "Put down the item you are carrying first.",
+          "请先放下物品。",
+        ),
       ),
     );
     target(
       "faucet",
-      k.faucetOn ? "关闭水龙头" : "打开水龙头",
+      k.faucetOn
+        ? text(language, "Turn off faucet", "关闭水龙头")
+        : text(language, "Turn on faucet", "打开水龙头"),
       rect(0.847, 0.271, 0.067, 0.088),
       { type: "TOGGLE_FAUCET" },
       "faucet",
       undefined,
       !held && k.waterRemaining > 0,
-      "需要空手且有剩余水量。",
+      text(
+        language,
+        "You need an empty hand and water remaining.",
+        "需要空手且有剩余水量。",
+      ),
     );
     target(
       "work",
       held
-        ? "放入水池"
+        ? text(language, "Place in sink", "放入水池")
         : onBoard
-          ? `拿起番茄 · ${onBoard.cleanliness}%`
-          : "水池",
+          ? text(
+              language,
+              `Pick up tomato · ${onBoard.cleanliness}%`,
+              `拿起番茄 · ${onBoard.cleanliness}%`,
+            )
+          : text(language, "Sink", "水池"),
       rect(0.517, 0.472, 0.428, 0.296),
       held
         ? { type: "PLACE_ITEM" }
@@ -138,20 +169,26 @@ export function gameTargets(
       "sink",
       onBoard,
       held?.kind === "tomato" || (!!onBoard && onBoard.cleanliness >= 92),
-      held ? "只有番茄需要清洗。" : "移动手或拖动番茄，让每一面经过水流。",
+      held
+        ? text(language, "Only tomatoes need washing.", "只有番茄需要清洗。")
+        : text(
+            language,
+            "Move your hand or drag the tomato so every side passes through the water.",
+            "移动手或拖动番茄，让每一面经过水流。",
+          ),
     );
   } else if (station.startsWith("board")) {
     target(
       "work",
       held?.kind === "knife"
-        ? "上下切菜"
+        ? text(language, "Chop up and down", "上下切菜")
         : held?.kind === "cloth"
-          ? "左右擦拭"
+          ? text(language, "Wipe left and right", "左右擦拭")
           : held
-            ? "放上菜板"
+            ? text(language, "Place on board", "放上菜板")
             : onBoard
-              ? "拿起食材"
-              : "空菜板",
+              ? text(language, "Pick up ingredient", "拿起食材")
+              : text(language, "Empty cutting board", "空菜板"),
       rect(0.22, 0.39, 0.59, 0.37),
       held
         ? { type: "PLACE_ITEM" }
@@ -159,22 +196,32 @@ export function gameTargets(
       "board",
       onBoard,
       held ? !held.homeStation && !onBoard : !!onBoard,
-      "在菜板上使用工具；空手可以拿起食材。",
+      text(
+        language,
+        "Use tools on the board; use an empty hand to pick up ingredients.",
+        "在菜板上使用工具；空手可以拿起食材。",
+      ),
     );
     target(
       "trash",
-      "丢弃食材",
+      text(language, "Discard ingredient", "丢弃食材"),
       rect(0.026, 0.191, 0.254, 0.078),
       { type: "DISCARD" },
       "trash",
       undefined,
       !!held && FOODS.includes(held.kind as (typeof FOODS)[number]),
-      "垃圾桶只接受食材。",
+      text(
+        language,
+        "Only ingredients can go in the bin.",
+        "垃圾桶只接受食材。",
+      ),
     );
   } else {
     target(
       "oven",
-      held?.kind === "oven-mitt" ? "取出 Pizza" : "放入烤箱",
+      held?.kind === "oven-mitt"
+        ? text(language, "Take out pizza", "取出 Pizza")
+        : text(language, "Add to oven", "放入烤箱"),
       rect(0.63, 0.43, 0.255, 0.2),
       held?.kind === "oven-mitt"
         ? { type: "TAKE_PIZZA" }
@@ -185,17 +232,25 @@ export function gameTargets(
         (held.kind === "oven-mitt"
           ? k.oven.status === "ready"
           : FOODS.includes(held.kind as (typeof FOODS)[number])),
-      "食材准备好后放入；烤好后使用隔热手套。",
+      text(
+        language,
+        "Add prepared ingredients; use the oven mitt when the pizza is ready.",
+        "食材准备好后放入；烤好后使用隔热手套。",
+      ),
     );
     target(
       "work",
-      "切开 Pizza",
+      text(language, "Slice pizza", "切开 Pizza"),
       rect(0.07, 0.44, 0.39, 0.39),
       { type: "SLICE_PIZZA" },
       "pass",
       onBoard,
       false,
-      "取出 Pizza，归还手套，再拿披萨刀上下切。",
+      text(
+        language,
+        "Take out the pizza, return the mitt, then slice with the pizza cutter.",
+        "取出 Pizza，归还手套，再拿披萨刀上下切。",
+      ),
     );
   }
   const positions: Record<string, Rect> = {
@@ -211,8 +266,16 @@ export function gameTargets(
     target(
       `tool-${item.kind}`,
       held?.id === item.id
-        ? `归还${labels[item.kind]}`
-        : `拿取${labels[item.kind]}`,
+        ? text(
+            language,
+            `Return ${labels[item.kind]}`,
+            `归还${labels[item.kind]}`,
+          )
+        : text(
+            language,
+            `Pick up ${labels[item.kind]}`,
+            `拿取${labels[item.kind]}`,
+          ),
       positions[item.kind],
       held?.id === item.id
         ? { type: "RETURN_TOOL" }
@@ -220,7 +283,11 @@ export function gameTargets(
       "tool",
       item,
       held ? held.id === item.id : item.location === "home",
-      "工具正在使用中，或需要先空手。",
+      text(
+        language,
+        "This tool is in use, or you need an empty hand first.",
+        "工具正在使用中，或需要先空手。",
+      ),
     );
   let actionTarget: ActionTarget | null = null;
   if (!held && onBoard?.kind === "dough" && onBoard.stretchProgress < 100)
@@ -249,11 +316,16 @@ export function intentAction(
   held: Item | undefined,
 ): KitchenAction | null {
   if (intent.type === "action") {
-    if (!held || intent.heldItemId !== held.id) return null;
-    if (intent.action === "STRETCH")
-      return held.kind === "dough" && intent.itemId === held.id
+    if (intent.action === "STRETCH") {
+      const boardItem = targets.find((t) => t.input.id === "work")?.item;
+      return !held &&
+        intent.heldItemId === null &&
+        boardItem?.kind === "dough" &&
+        intent.itemId === boardItem.id
         ? { type: "STRETCH" }
         : null;
+    }
+    if (!held || intent.heldItemId !== held.id) return null;
     if (
       intent.action !== "CHOP" ||
       targets.find((t) => t.input.id === "work")?.item?.id !== intent.itemId

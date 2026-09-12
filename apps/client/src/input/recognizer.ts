@@ -8,6 +8,7 @@ import {
   type ToolId,
 } from "./types";
 import { measureMotion, motionSample, type MotionSample } from "./metrics";
+import { text, type Language } from "../i18n";
 
 export const DEFAULT_CONFIG = {
   grabMs: 180,
@@ -24,13 +25,17 @@ export const DEFAULT_CONFIG = {
   circleMs: 2600,
 };
 type Config = typeof DEFAULT_CONFIG;
-const initialView = (): InputView => ({
+const initialView = (language: Language): InputView => ({
   held: null,
   hover: null,
   cursor: null,
   pose: "lost",
   progress: 0,
-  hint: "张开手，移动到下方厨具，再握拳抓取",
+  hint: text(
+    language,
+    "Open your hand over a tool, then make a fist to pick it up",
+    "张开手，移动到下方厨具，再握拳抓取",
+  ),
 });
 const angleDelta = (a: number, b: number) =>
   Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -40,7 +45,8 @@ const cursorPoint = (hand: Hand) => ({
 });
 
 export class KitchenRecognizer {
-  view = initialView();
+  view: InputView;
+  private language: Language;
   private handId: string | null = null;
   private recoveryId: string | null = null;
   private recoverySince = 0;
@@ -62,12 +68,17 @@ export class KitchenRecognizer {
   private samples: { x: number; y: number; t: number }[] = [];
   private motion: MotionSample[] = [];
   private config: Config;
-  constructor(config: Partial<Config> = {}) {
+  constructor(config: Partial<Config> = {}, language: Language = "zh") {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.language = language;
+    this.view = initialView(language);
+  }
+  setLanguage(language: Language) {
+    this.language = language;
   }
 
   reset() {
-    this.view = initialView();
+    this.view = initialView(this.language);
     this.handId = null;
     this.recoveryId = null;
     this.lastPalm = null;
@@ -125,7 +136,11 @@ export class KitchenRecognizer {
     this.view.held = null;
     this.clearMotion();
     this.cooldownUntil = time + this.config.cooldownMs;
-    this.view.hint = "已放下。张开手选择下一件厨具";
+    this.view.hint = text(
+      this.language,
+      "Released. Open your hand to choose another tool",
+      "已放下。张开手选择下一件厨具",
+    );
     return { type: "release", tool, source, detectedAt: time };
   }
 
@@ -155,15 +170,27 @@ export class KitchenRecognizer {
       this.view.cursor = cursorPoint(candidate);
       this.view.pose = "moving";
       this.view.hover = null;
-      this.view.hint = "正在重新跟随这只手，物品仍保留";
+      this.view.hint = text(
+        this.language,
+        "Tracking this hand again; your item is still held",
+        "正在重新跟随这只手，物品仍保留",
+      );
       if (time - this.recoverySince < this.config.reacquireMs) return [];
       hand = candidate;
     }
     if (!hand) {
       this.suspend();
       this.view.hint = this.view.held
-        ? "手暂时离开了画面，物品仍然保留"
-        : "请把张开的手放进画面";
+        ? text(
+            this.language,
+            "Your hand left the frame; your item is still held",
+            "手暂时离开了画面，物品仍然保留",
+          )
+        : text(
+            this.language,
+            "Bring an open hand into view",
+            "请把张开的手放进画面",
+          );
       return [];
     }
     this.handId = hand.id;
@@ -199,7 +226,11 @@ export class KitchenRecognizer {
       return [];
 
     if (!this.view.held) {
-      this.view.hint = "张手瞄准厨具，再握拳抓取";
+      this.view.hint = text(
+        this.language,
+        "Aim at a tool with an open hand, then make a fist to pick it up",
+        "张手瞄准厨具，再握拳抓取",
+      );
       if (hand.open && zone && zone !== "drop") {
         if (this.openTarget !== zone) this.openSince = time;
         this.openTarget = zone;
@@ -238,7 +269,11 @@ export class KitchenRecognizer {
       this.armed = false;
       this.samples = [];
       this.motion = [];
-      this.view.hint = "在放置区张开手，保持片刻";
+      this.view.hint = text(
+        this.language,
+        "Open your hand in the drop zone and hold",
+        "在放置区张开手，保持片刻",
+      );
       if (hand.open) {
         this.dropSince ??= time;
         this.view.progress = Math.min(
@@ -265,7 +300,17 @@ export class KitchenRecognizer {
     else this.motion = [];
     if (tool === "knife" || tool === "dough") {
       this.view.hint =
-        tool === "knife" ? "手向下切，再抬回原位" : "双手张开，一起下压再抬起";
+        tool === "knife"
+          ? text(
+              this.language,
+              "Move down to chop, then lift back up",
+              "手向下切，再抬回原位",
+            )
+          : text(
+              this.language,
+              "Keep both hands open, press down together, then lift",
+              "双手张开，一起下压再抬起",
+            );
       const other = hands.find((h) => h.id !== hand.id);
       if (
         tool === "dough" &&
@@ -276,7 +321,11 @@ export class KitchenRecognizer {
         this.armed = false;
         this.stage = 0;
         this.motion = [];
-        this.view.hint = "揉面需要两只张开的手并排入镜";
+        this.view.hint = text(
+          this.language,
+          "Put two open hands side by side in the camera view",
+          "揉面需要两只张开的手并排入镜",
+        );
         return [];
       }
       const y = hand.palm.y;
@@ -309,9 +358,18 @@ export class KitchenRecognizer {
         this.stage === 1 &&
         this.peak - y >= this.config.travel * 0.75 &&
         this.secondPeak - secondY >= this.config.travel * 0.75;
-      if (this.stage) this.view.hint = "幅度已到位，抬回即可完成一次";
+      if (this.stage)
+        this.view.hint = text(
+          this.language,
+          "Good range — lift back up to complete the motion",
+          "幅度已到位，抬回即可完成一次",
+        );
     } else if (tool === "salt") {
-      this.view.hint = "拇指食指捏合，再打开撒下调料";
+      this.view.hint = text(
+        this.language,
+        "Pinch thumb and index finger, then open them to sprinkle",
+        "拇指食指捏合，再打开撒下调料",
+      );
       if (this.stage && time - this.began > this.config.cycleMs) this.stage = 0;
       if (
         hand.pinch < this.config.pinchClose &&
@@ -326,9 +384,18 @@ export class KitchenRecognizer {
         this.stage === 1 &&
         hand.pinch > this.config.pinchOpen &&
         time - this.began >= 30;
-      if (this.stage) this.view.hint = "捏合已识别，打开拇指与食指";
+      if (this.stage)
+        this.view.hint = text(
+          this.language,
+          "Pinch detected — open your thumb and index finger",
+          "捏合已识别，打开拇指与食指",
+        );
     } else if (tool === "jug") {
-      this.view.hint = "手腕竖直准备，向侧面倾斜，再回正";
+      this.view.hint = text(
+        this.language,
+        "Start upright, tilt your wrist sideways, then return upright",
+        "手腕竖直准备，向侧面倾斜，再回正",
+      );
       if (!this.armed && Math.abs(hand.angle) < 0.4) {
         this.armed = true;
         this.base = hand.angle;
@@ -346,9 +413,18 @@ export class KitchenRecognizer {
       this.view.progress = this.stage ? 0.65 : 0;
       complete =
         this.stage === 1 && Math.abs(angleDelta(hand.angle, this.base)) < 0.25;
-      if (this.stage) this.view.hint = "倾斜已到位，手腕回正即可";
+      if (this.stage)
+        this.view.hint = text(
+          this.language,
+          "Tilt detected — return your wrist upright",
+          "倾斜已到位，手腕回正即可",
+        );
     } else {
-      this.view.hint = "像握着勺子，朝摄像头画一个清晰的圆";
+      this.view.hint = text(
+        this.language,
+        "Pretend to hold a spoon and draw a clear circle toward the camera",
+        "像握着勺子，朝摄像头画一个清晰的圆",
+      );
       this.samples.push({ ...hand.palm, t: time });
       this.samples = this.samples.filter(
         (p) => time - p.t <= this.config.circleMs,
