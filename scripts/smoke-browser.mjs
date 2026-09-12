@@ -231,11 +231,19 @@ try {
   await target(sink, "food-dough");
   await choose(board1, "Alice");
   await target(board1, "work");
-  for (let n = 0; n < 4; n++)
+  for (let n = 0; n < 4; n++) {
     await click(
       board1,
       board1.getByRole("button", { name: "Simulate two-hand stretch" }),
     );
+    assert.equal(
+      await board1
+        .getByRole("progressbar", { name: "Stretching progress" })
+        .getAttribute("aria-valuenow"),
+      String((n + 1) * 25),
+    );
+  }
+  await shot(board1, "stretched");
   await wait(
     board1,
     () =>
@@ -265,6 +273,11 @@ try {
   await target(board2, "work");
   await choose(oven, "Bob");
   await target(oven, "oven");
+  await oven.locator(".oven-pizza img.visible").waitFor();
+  assert.equal(
+    await oven.locator(".oven-pizza img.visible").getAttribute("src"),
+    "/assets/tools/pizza1.png",
+  );
   await shot(oven, "baking");
   await oven.reload();
   await wait(oven, () => JSON.parse(window.render_game_to_text()).ready);
@@ -276,12 +289,81 @@ try {
     null,
     { timeout: 25000 },
   );
+  assert.equal(
+    await oven.locator(".oven-pizza img.visible").getAttribute("src"),
+    "/assets/tools/pizza4.png",
+  );
+  await shot(oven, "ready");
   await target(oven, "oven");
+  assert.equal(await oven.locator(".oven-pizza").count(), 0);
+  assert.equal(
+    await oven.locator(".target-pass img").getAttribute("src"),
+    "/assets/tools/pizza-plate.png",
+  );
   await target(oven, "tool-oven-mitt");
   await target(oven, "tool-pizza-cutter");
-  await oven.getByRole("button", { name: "Simulate one chop" }).click();
+  for (let n = 0; n < 5; n++) {
+    await click(oven, oven.getByRole("button", { name: "Simulate one chop" }));
+    if (n < 4) {
+      assert.equal((await state(oven)).mode, "playing");
+      assert.equal(
+        await oven
+          .getByRole("progressbar", { name: "Slicing progress" })
+          .getAttribute("aria-valuenow"),
+        String((n + 1) * 20),
+      );
+      assert.equal(await oven.getByRole("dialog").count(), 0);
+      if (n === 1) await shot(oven, "slicing");
+    }
+  }
   await oven.getByRole("heading", { name: "Order up!" }).waitFor();
   await shot(oven, "served");
+  await shot(sink, "served-host");
+  assert.equal(
+    await oven
+      .getByRole("button", { name: "Waiting for the host to restart" })
+      .isDisabled(),
+    true,
+  );
+  assert.equal(
+    await oven.locator(".result-art img").getAttribute("src"),
+    "/assets/tools/pizza4.png",
+  );
+  assert(
+    await oven
+      .getByRole("dialog", { name: "Order up!" })
+      .evaluate((dialog) => dialog.matches(":modal")),
+  );
+  await oven.keyboard.press("Escape");
+  assert(await oven.getByRole("dialog", { name: "Order up!" }).isVisible());
+  await oven.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(
+    await oven
+      .locator(".result-copy")
+      .evaluate((node) => getComputedStyle(node).opacity),
+    "1",
+  );
+  assert.equal(
+    await oven
+      .locator(".result-art")
+      .evaluate((node) => getComputedStyle(node).opacity),
+    "1",
+  );
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await oven.setViewportSize(viewport);
+    const leave = oven.getByRole("button", { name: "Leave kitchen" });
+    await leave.scrollIntoViewIfNeeded();
+    assert(await leave.isVisible());
+    assert(
+      await oven
+        .getByRole("dialog")
+        .evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth),
+    );
+    await shot(oven, `results-${viewport.width}`);
+  }
   for (const page of pages) {
     const s = await state(page);
     assert.equal(s.kitchen.finishedReason, "served");
@@ -293,6 +375,7 @@ try {
     () => JSON.parse(window.render_game_to_text()).mode === "playing",
   );
   assert.equal((await state(sink)).kitchen.waste.total, 0);
+  assert.equal(await sink.getByRole("dialog").count(), 0);
   const mobile = await browser.newPage({
     viewport: { width: 390, height: 844 },
   });

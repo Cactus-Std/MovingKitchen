@@ -51,6 +51,7 @@ import {
 } from "./i18n";
 
 function foodSprite(item: Item): string | null {
+  if (item.kind === "pizza") return "/assets/tools/pizza-plate.png";
   if (!FOODS.includes(item.kind as (typeof FOODS)[number])) return null;
   const stage =
     item.kind === "tomato" || item.kind === "sausage" || item.kind === "cheese"
@@ -140,9 +141,7 @@ export function App() {
   const net = useNetwork(),
     room = net.room,
     k = room?.kitchen;
-  const resultPreview = new URLSearchParams(window.location.search).has(
-    "resultPreview",
-  );
+  const resultsDialog = useRef<HTMLDialogElement | null>(null);
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE),
     [code, setCode] = useState(""),
     [debugMode, setDebugMode] = useState(false);
@@ -344,6 +343,10 @@ export function App() {
     };
   }, []);
   useEffect(() => {
+    if (k?.status === "finished" && !resultsDialog.current?.open)
+      resultsDialog.current?.showModal();
+  }, [k?.status]);
+  useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.title = text(
       language,
@@ -413,6 +416,10 @@ export function App() {
     k && station
       ? k.items[k.stations[station].occupiedItemId ?? ""]
       : undefined;
+  const boardProgress =
+    boardItem?.kind === "dough"
+      ? boardItem.stretchProgress
+      : (boardItem?.cutProgress ?? 0);
   const error = message ?? net.error ?? identity.error ?? input.error;
   const connection = (
     <span className={`connection ${net.connected ? "online" : ""}`}>
@@ -814,11 +821,37 @@ export function App() {
                         {text(language, "IN USE", "使用中")}
                       </span>
                     )}
-                    {t.visual === "board" && boardItem && (
-                      <span className="process">
-                        <span style={{ width: `${boardItem.cutProgress}%` }} />
-                      </span>
-                    )}
+                    {(t.visual === "board" || t.visual === "pass") &&
+                      boardItem && (
+                        <span
+                          className="process"
+                          role="progressbar"
+                          aria-label={
+                            boardItem.kind === "dough"
+                              ? text(
+                                  language,
+                                  "Stretching progress",
+                                  "展开进度",
+                                )
+                              : boardItem.kind === "pizza"
+                                ? text(
+                                    language,
+                                    "Slicing progress",
+                                    "披萨切分进度",
+                                  )
+                                : text(
+                                    language,
+                                    "Chopping progress",
+                                    "切菜进度",
+                                  )
+                          }
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={boardProgress}
+                        >
+                          <span style={{ width: `${boardProgress}%` }} />
+                        </span>
+                      )}
                   </button>
                 ))}
                 {station === "storage-sink" && (
@@ -867,11 +900,15 @@ export function App() {
                       className={`board-stain ${k?.stations[station].dirty ? "dirty" : ""}`}
                     />
                     <div className="station-hint">
-                      {boardItem?.kind === "dough" && !boardItem.stretched
+                      {boardItem?.kind === "dough"
                         ? text(
                             language,
-                            `Use two empty hands to stretch the dough · ${boardItem.stretchProgress}%`,
-                            `空手用双手展开面团 · ${boardItem.stretchProgress}%`,
+                            boardItem.stretched
+                              ? "Dough is ready · Pick it up and take it to the oven"
+                              : `Use two empty hands to stretch the dough · ${boardItem.stretchProgress}%`,
+                            boardItem.stretched
+                              ? "面团已展开 · 拿起后送入烤箱"
+                              : `空手用双手展开面团 · ${boardItem.stretchProgress}%`,
                           )
                         : k?.stations[station].dirty
                           ? text(
@@ -910,22 +947,64 @@ export function App() {
                               )
                             : text(
                                 language,
-                                "Slice the pizza to serve",
-                                "切开 Pizza，准备出餐",
+                                `Slice the pizza · ${Math.round((boardItem?.cutProgress ?? 0) / 20)}/5 cuts`,
+                                `切开 Pizza · ${Math.round((boardItem?.cutProgress ?? 0) / 20)}/5 次`,
                               )}
                     </div>
+                    {(k?.oven.status === "baking" ||
+                      k?.oven.status === "ready") && (
+                      <div className="oven-pizza">
+                        {[1, 2, 3, 4].map((stage) => (
+                          <img
+                            key={stage}
+                            src={`/assets/tools/pizza${stage}.png`}
+                            alt=""
+                            draggable={false}
+                            className={
+                              stage ===
+                              Math.min(
+                                4,
+                                Math.floor((k.oven.cookProgress * 3) / 100) + 1,
+                              )
+                                ? "visible"
+                                : ""
+                            }
+                          />
+                        ))}
+                        <div
+                          className="oven-progress"
+                          role="progressbar"
+                          aria-label={text(
+                            language,
+                            "Baking progress",
+                            "烘烤进度",
+                          )}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(k.oven.cookProgress)}
+                        >
+                          <i style={{ width: `${k.oven.cookProgress}%` }} />
+                        </div>
+                      </div>
+                    )}
                     <div className="station-hint">
-                      {held?.kind === "dough" && !held.stretched
+                      {boardItem?.kind === "pizza"
                         ? text(
                             language,
-                            `Keep stretching the dough with both hands ${held.stretchProgress}% · Finish before adding it to the oven.`,
-                            `重复双手展开面饼 ${held.stretchProgress}% · 完成后再放入烤箱。`,
+                            "Return the mitt → Pick up the pizza cutter → Make five cuts on the tray",
+                            "归还手套 → 拿起披萨刀 → 在托盘切五次",
                           )
-                        : text(
-                            language,
-                            "Add all four ingredients to bake · Remove the pizza within 15 seconds",
-                            "备齐四种食材自动烤制 · 烤好后有 15 秒取出时间",
-                          )}
+                        : held?.kind === "dough" && !held.stretched
+                          ? text(
+                              language,
+                              "Place the dough on a cutting board and stretch it with empty hands before adding it to the oven.",
+                              "先将面团放到菜板，空手用双手展开，再送入烤箱。",
+                            )
+                          : text(
+                              language,
+                              "Add all four ingredients to bake · Remove the pizza within 15 seconds",
+                              "备齐四种食材自动烤制 · 烤好后有 15 秒取出时间",
+                            )}
                     </div>
                   </>
                 )}
@@ -1148,88 +1227,101 @@ export function App() {
               </button>
             </div>
           )}
-          {resultPreview && (
-            <div className="modal-backdrop result-preview-backdrop">
-              <div className="result-preview-pizza">
-                <img src="/assets/tools/pizza-plate.png" alt="Result pizza preview" />
-              </div>
-            </div>
-          )}
           {k?.status === "finished" && (
-            <div className="modal-backdrop">
+            <dialog
+              ref={resultsDialog}
+              className="result-backdrop"
+              aria-labelledby="result-title"
+              onCancel={(event) => event.preventDefault()}
+            >
               <section className="results">
-                <p className="eyebrow">
-                  {text(language, "SERVICE COMPLETE", "本轮结束")}
-                </p>
-                <div className="result-art">
-                  {k.finishedReason === "served"
-                    ? "🍕"
-                    : k.finishedReason === "burnt"
-                      ? "🔥"
-                      : "⏲️"}
+                <div className="result-art" aria-hidden="true">
+                  {k.finishedReason === "served" ? (
+                    <img
+                      src="/assets/tools/pizza4.png"
+                      alt=""
+                      draggable={false}
+                    />
+                  ) : k.finishedReason === "burnt" ? (
+                    "🔥"
+                  ) : (
+                    "⏲️"
+                  )}
                 </div>
-                <h1>
-                  {k.finishedReason === "served"
-                    ? text(language, "Order up!", "开饭啦！")
-                    : k.finishedReason === "burnt"
-                      ? text(language, "The pizza burned", "Pizza 烤焦了")
-                      : text(language, "Time's up", "时间到了")}
-                </h1>
-                <p>
-                  {k.finishedReason === "served"
-                    ? text(
-                        language,
-                        "Four stations, one perfectly coordinated team.",
-                        "四个工位，一份默契。",
-                      )
-                    : text(
-                        language,
-                        "Try again — the teamwork gets smoother every round.",
-                        "再来一次，分工会更顺手。",
-                      )}
-                </p>
-                <strong className="score">
-                  {k.score}
-                  <small> {text(language, "pts", "分")}</small>
-                </strong>
-                <div className="result-stats">
-                  <span>
-                    {text(language, "Water left", "剩余水量")}{" "}
-                    <b>{Math.round(k.waterRemaining)}%</b>
-                  </span>
-                  <span>
-                    {text(language, "Food wasted", "食材浪费")}{" "}
-                    <b>{k.waste.total}</b>
-                  </span>
-                  <span>
-                    {text(language, "Time left", "剩余时间")}{" "}
-                    <b>{Math.ceil(k.remainingMs / 1000)}s</b>
-                  </span>
+                <div className="result-copy">
+                  <p className="eyebrow">
+                    {text(language, "SERVICE COMPLETE", "本轮结束")}
+                  </p>
+                  <h1 id="result-title">
+                    {k.finishedReason === "served"
+                      ? text(language, "Order up!", "开饭啦！")
+                      : k.finishedReason === "burnt"
+                        ? text(language, "The pizza burned", "Pizza 烤焦了")
+                        : text(language, "Time's up", "时间到了")}
+                  </h1>
+                  <p>
+                    {k.finishedReason === "served"
+                      ? text(
+                          language,
+                          "Four stations, one perfectly coordinated team.",
+                          "四个工位，一份默契。",
+                        )
+                      : text(
+                          language,
+                          "Try again — the teamwork gets smoother every round.",
+                          "再来一次，分工会更顺手。",
+                        )}
+                  </p>
+                  <strong className="score">
+                    {k.score}
+                    <small> {text(language, "pts", "分")}</small>
+                  </strong>
+                  <div className="result-stats">
+                    <span>
+                      {text(language, "Water left", "剩余水量")}{" "}
+                      <b>{Math.round(k.waterRemaining)}%</b>
+                    </span>
+                    <span>
+                      {text(language, "Food wasted", "食材浪费")}{" "}
+                      <b>{k.waste.total}</b>
+                    </span>
+                    <span>
+                      {text(language, "Time left", "剩余时间")}{" "}
+                      <b>{Math.ceil(k.remainingMs / 1000)}s</b>
+                    </span>
+                  </div>
+                  <button
+                    className="primary"
+                    disabled={
+                      busy || !net.ready || room.hostDeviceId !== deviceId
+                    }
+                    onClick={() =>
+                      void run(() => command("game:restart", roomMeta()))
+                    }
+                  >
+                    {room.hostDeviceId === deviceId
+                      ? text(language, "Cook another", "再开一单")
+                      : text(
+                          language,
+                          "Waiting for the host to restart",
+                          "等待房主重开",
+                        )}
+                  </button>
+                  <button disabled={busy} onClick={() => void run(leaveRoom)}>
+                    {text(language, "Leave kitchen", "离开厨房")}
+                  </button>
+                  {error && (
+                    <p className="result-error" role="alert">
+                      {error}
+                    </p>
+                  )}
                 </div>
-                <button
-                  className="primary"
-                  disabled={busy || room.hostDeviceId !== deviceId}
-                  onClick={() =>
-                    void run(() => command("game:restart", roomMeta()))
-                  }
-                >
-                  {room.hostDeviceId === deviceId
-                    ? text(language, "Cook another", "再开一单")
-                    : text(
-                        language,
-                        "Waiting for the host to restart",
-                        "等待房主重开",
-                      )}
-                </button>
-                <button onClick={() => void run(leaveRoom)}>
-                  {text(language, "Leave kitchen", "离开厨房")}
-                </button>
               </section>
-            </div>
+            </dialog>
           )}
         </>
       )}
-      {error && (
+      {error && k?.status !== "finished" && (
         <div className="error-toast" role="alert">
           {error}
           <button
@@ -1270,7 +1362,7 @@ export function App() {
                   </li>
                   <li>
                     Place the <b>dough</b> on a board. With empty hands, bring
-                    both hands together, then stretch them apart.
+                    both hands together, then stretch them apart four times.
                   </li>
                   <li>
                     Add all four ingredients to the <b>oven</b>, bake for 20
@@ -1278,7 +1370,7 @@ export function App() {
                   </li>
                   <li>
                     Return the mitt, pick up the <b>pizza cutter</b>, and slice
-                    on the tray to serve!
+                    five times on the tray to serve!
                   </li>
                 </ol>
                 <p>
@@ -1299,14 +1391,14 @@ export function App() {
                   </li>
                   <li>
                     <b>面饼</b>
-                    放到菜板上，空手将双手靠近，再向两侧展开。
+                    放到菜板上，空手将双手靠近，再向两侧展开四次。
                   </li>
                   <li>
                     把四种食材放进<b>烤箱</b>，等待 20 秒，用隔热手套取出。
                   </li>
                   <li>
                     归还手套，拿起<b>披萨刀</b>
-                    ，在托盘上下切，完成出餐！
+                    ，在托盘上下切五次，完成出餐！
                   </li>
                 </ol>
                 <p>
