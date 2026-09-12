@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { RoomState } from "@kitchen/shared";
 import { newKitchen, applyKitchenAction } from "../../server/src/kitchen";
@@ -64,7 +70,16 @@ vi.mock("./input/useKitchenInput", () => ({
 
 import { App } from "./App";
 
+const play = vi
+  .spyOn(window.HTMLMediaElement.prototype, "play")
+  .mockResolvedValue();
+const pause = vi
+  .spyOn(window.HTMLMediaElement.prototype, "pause")
+  .mockImplementation(() => {});
+
 beforeEach(() => {
+  play.mockClear();
+  pause.mockClear();
   network.room = null;
   window.history.replaceState({}, "", "/");
   HTMLDialogElement.prototype.showModal = function () {
@@ -228,4 +243,45 @@ it("shows stretching progress on the board and ignores the old temporary preview
       .getAttribute("aria-valuenow"),
   ).toBe("25");
   expect(view.container.querySelector(".result-preview-backdrop")).toBeNull();
+});
+
+it("starts looping background music by default and exposes a bilingual toggle", () => {
+  render(<App />);
+
+  const audio = document.querySelector("audio");
+  expect(audio?.getAttribute("src")).toBe("/assets/audio/arcade-groove.mp3");
+  expect(audio?.loop).toBe(true);
+  expect(play).toHaveBeenCalledOnce();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Turn off background music" }),
+  );
+  expect(pause).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("button", { name: "Turn on background music" }),
+  ).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "中文" }));
+  expect(screen.getByRole("button", { name: "开启背景音乐" })).toBeTruthy();
+});
+
+it("keeps the music toggle usable in the results dialog and preserves it on restart", () => {
+  const room = kitchenRoom();
+  room.kitchen.status = "finished";
+  room.kitchen.finishedReason = "served";
+  const view = render(<App />);
+  const dialog = within(screen.getByRole("dialog", { name: "Order up!" }));
+  fireEvent.click(
+    dialog.getByRole("button", { name: "Turn off background music" }),
+  );
+  expect(pause).toHaveBeenCalledOnce();
+  expect(
+    dialog.getByRole("button", { name: "Turn on background music" }),
+  ).toBeTruthy();
+  room.kitchen.status = "playing";
+  view.rerender(<App />);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Turn on background music" }),
+  ).toBeTruthy();
 });

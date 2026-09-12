@@ -336,6 +336,15 @@ try {
   );
   await oven.keyboard.press("Escape");
   assert(await oven.getByRole("dialog", { name: "Order up!" }).isVisible());
+  const resultDialog = oven.getByRole("dialog", { name: "Order up!" });
+  await resultDialog
+    .getByRole("button", { name: "Turn off background music" })
+    .click();
+  assert(await oven.locator("audio").evaluate((audio) => audio.paused));
+  await resultDialog
+    .getByRole("button", { name: "Turn on background music" })
+    .click();
+  await oven.waitForFunction(() => !document.querySelector("audio").paused);
   await oven.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(
     await oven
@@ -354,6 +363,14 @@ try {
     { width: 844, height: 390 },
   ]) {
     await oven.setViewportSize(viewport);
+    const music = resultDialog.getByRole("button", {
+      name: "Turn off background music",
+    });
+    assert(await music.isVisible());
+    const musicBounds = await music.boundingBox();
+    assert(
+      musicBounds.x >= 0 && musicBounds.x + musicBounds.width <= viewport.width,
+    );
     const leave = oven.getByRole("button", { name: "Leave kitchen" });
     await leave.scrollIntoViewIfNeeded();
     assert(await leave.isVisible());

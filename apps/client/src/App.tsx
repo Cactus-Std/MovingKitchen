@@ -113,6 +113,39 @@ function LanguageToggle({
   );
 }
 
+function MusicToggle({
+  enabled,
+  language,
+  onToggle,
+}: {
+  enabled: boolean;
+  language: Language;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`music-toggle ${enabled ? "active" : ""}`}
+      aria-label={
+        enabled
+          ? text(language, "Turn off background music", "关闭背景音乐")
+          : text(language, "Turn on background music", "开启背景音乐")
+      }
+      aria-pressed={enabled}
+      onClick={onToggle}
+    >
+      <span className="music-toggle-icon" aria-hidden="true">
+        {enabled ? "♫" : "♪"}
+      </span>
+      <span className="music-toggle-label">
+        {enabled
+          ? text(language, "Music on", "音乐开")
+          : text(language, "Music off", "音乐关")}
+      </span>
+    </button>
+  );
+}
+
 function Art({ item, language }: { item: Item; language: Language }) {
   const labels = getItemLabels(language);
   const sprite = foodSprite(item);
@@ -152,8 +185,10 @@ export function App() {
   const [message, setMessage] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [pending, setPending] = useState(false),
-    [guide, setGuide] = useState(false);
+    [guide, setGuide] = useState(false),
+    [musicEnabled, setMusicEnabled] = useState(true);
   const video = useRef<HTMLVideoElement | null>(null),
+    music = useRef<HTMLAudioElement | null>(null),
     pose = useRef<PoseSample | null>(null),
     flight = useRef<string | null>(null);
   const labels = getItemLabels(language);
@@ -347,6 +382,40 @@ export function App() {
       resultsDialog.current?.showModal();
   }, [k?.status]);
   useEffect(() => {
+    const audio = music.current;
+    if (!audio) return;
+    audio.volume = 0.35;
+    if (!musicEnabled) {
+      audio.pause();
+      return;
+    }
+
+    let disposed = false;
+    const removeUnlockListeners = () => {
+      window.removeEventListener("pointerdown", unlockMusic);
+      window.removeEventListener("keydown", unlockMusic);
+    };
+    const playMusic = async () => {
+      try {
+        await audio.play();
+        if (!disposed) removeUnlockListeners();
+      } catch {
+        // Browsers may wait for the first user gesture before allowing sound.
+      }
+    };
+    const unlockMusic = () => {
+      void playMusic();
+    };
+
+    window.addEventListener("pointerdown", unlockMusic);
+    window.addEventListener("keydown", unlockMusic);
+    void playMusic();
+    return () => {
+      disposed = true;
+      removeUnlockListeners();
+    };
+  }, [musicEnabled]);
+  useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.title = text(
       language,
@@ -444,9 +513,20 @@ export function App() {
   };
   return (
     <main className={room ? "kitchen-app" : "welcome-app"}>
+      <audio
+        ref={music}
+        src="/assets/audio/arcade-groove.mp3"
+        loop
+        preload="auto"
+      />
       {!room ? (
         <section className="welcome">
-          <div className="welcome-language">
+          <div className="welcome-controls">
+            <MusicToggle
+              enabled={musicEnabled}
+              language={language}
+              onToggle={() => setMusicEnabled((enabled) => !enabled)}
+            />
             <LanguageToggle language={language} onChange={changeLanguage} />
           </div>
           <div className="welcome-copy">
@@ -561,6 +641,11 @@ export function App() {
             {k?.status === "lobby" && (
               <LanguageToggle language={language} onChange={changeLanguage} />
             )}
+            <MusicToggle
+              enabled={musicEnabled}
+              language={language}
+              onToggle={() => setMusicEnabled((enabled) => !enabled)}
+            />
             <button className="text-button" onClick={() => setGuide(true)}>
               {text(language, "How to play", "玩法")}
             </button>
@@ -1317,6 +1402,11 @@ export function App() {
                   )}
                 </div>
               </section>
+              <MusicToggle
+                enabled={musicEnabled}
+                language={language}
+                onToggle={() => setMusicEnabled((enabled) => !enabled)}
+              />
             </dialog>
           )}
         </>
