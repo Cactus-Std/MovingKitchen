@@ -23,7 +23,12 @@ function prepared() {
   const r = rig();
   for (const ingredient of ["tomato", "sausage", "cheese", "dough"] as const) {
     r.act("storage-sink", { type: "PICKUP_STORAGE", ingredient });
-    if (ingredient === "dough") r.act("storage-sink", { type: "STRETCH" });
+    if (ingredient === "dough") {
+      const id = r.held().id;
+      r.act("board-1", { type: "PLACE_ITEM" });
+      for (let i = 0; i < 4; i++) r.act("board-1", { type: "STRETCH" });
+      r.act("board-1", { type: "PICKUP_ITEM", itemId: id });
+    }
     if (ingredient === "tomato") {
       r.act("storage-sink", { type: "PLACE_ITEM" });
       r.act("storage-sink", { type: "TOGGLE_FAUCET" });
@@ -37,7 +42,11 @@ function prepared() {
       r.act("storage-sink", { type: "TOGGLE_FAUCET" });
       r.act("storage-sink", { type: "PICKUP_ITEM", itemId: id });
     }
-    if (ingredient === "tomato" || ingredient === "sausage") {
+    if (
+      ingredient === "tomato" ||
+      ingredient === "sausage" ||
+      ingredient === "cheese"
+    ) {
       const id = r.held().id;
       r.act("board-1", { type: "PLACE_ITEM" });
       r.act("board-1", { type: "PICKUP_ITEM", itemId: "board-1:knife" });
@@ -70,10 +79,16 @@ describe("authoritative kitchen", () => {
     const before = structuredClone(state);
     expect(() => act("oven-pass", { type: "ADD_TO_OVEN" })).toThrow();
     expect(state).toEqual(before);
-    act("storage-sink", { type: "STRETCH" });
+    const firstDough = state.playerCarry.chef!;
+    act("board-1", { type: "PLACE_ITEM" });
+    for (let i = 0; i < 4; i++) act("board-1", { type: "STRETCH" });
+    act("board-1", { type: "PICKUP_ITEM", itemId: firstDough });
     act("oven-pass", { type: "ADD_TO_OVEN" });
     act("storage-sink", { type: "PICKUP_STORAGE", ingredient: "dough" });
-    act("storage-sink", { type: "STRETCH" });
+    const duplicateDough = state.playerCarry.chef!;
+    act("board-1", { type: "PLACE_ITEM" });
+    for (let i = 0; i < 4; i++) act("board-1", { type: "STRETCH" });
+    act("board-1", { type: "PICKUP_ITEM", itemId: duplicateDough });
     expect(() => act("oven-pass", { type: "ADD_TO_OVEN" })).toThrow();
     act("board-1", { type: "DISCARD" });
     act("storage-sink", { type: "PICKUP_STORAGE", ingredient: "tomato" });
@@ -95,6 +110,26 @@ describe("authoritative kitchen", () => {
     expect(() => act("board-2", { type: "PICKUP_ITEM", itemId: id })).toThrow();
     act("board-1", { type: "PICKUP_ITEM", itemId: "board-1:knife" });
     expect(() => act("board-2", { type: "RETURN_TOOL" })).toThrow();
+  });
+  it("allows dough to be parked on a board and tracks repeated stretching", () => {
+    const { state, act, held } = rig();
+    act("storage-sink", { type: "PICKUP_STORAGE", ingredient: "dough" });
+    const id = held().id;
+    act("board-1", { type: "PLACE_ITEM" });
+    expect(state.items[id].location).toBe("board-1");
+    for (let progress = 25; progress <= 100; progress += 25) {
+      act("board-1", { type: "STRETCH" });
+      expect(state.items[id].stretchProgress).toBe(progress);
+    }
+    expect(state.items[id].stretched).toBe(true);
+  });
+  it("does not make a clean board dirty after chopping cheese", () => {
+    const { state, act } = rig();
+    act("storage-sink", { type: "PICKUP_STORAGE", ingredient: "cheese" });
+    act("board-1", { type: "PLACE_ITEM" });
+    act("board-1", { type: "PICKUP_ITEM", itemId: "board-1:knife" });
+    for (let i = 0; i < 5; i++) act("board-1", { type: "CHOP" });
+    expect(state.stations["board-1"].dirty).toBe(false);
   });
   it("shares finite water, validates patch progress, and stops at timeout", () => {
     const { state, act } = rig();
@@ -126,7 +161,7 @@ describe("authoritative kitchen", () => {
   });
   it("applies cross-contamination and lets cloth clean an empty board", () => {
     const { state, act } = prepared();
-    expect(state.stations["board-1"].contaminationCount).toBe(1);
+    expect(state.stations["board-1"].contaminationCount).toBe(3);
     act("board-1", { type: "PICKUP_ITEM", itemId: "board-1:cloth" });
     act("board-1", { type: "WIPE" });
     expect(state.stations["board-1"].dirty).toBe(false);

@@ -33,6 +33,7 @@ export interface Item {
   cleanliness: number;
   cutProgress: number;
   hygiene: number;
+  stretchProgress: number;
   stretched: boolean;
   homeStation?: StationId;
   washedPatches: number[];

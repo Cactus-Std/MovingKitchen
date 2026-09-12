@@ -61,7 +61,7 @@ export type KitchenIntent = IntentBase &
     | {
         type: "action";
         itemId: string;
-        heldItemId: string;
+        heldItemId: string | null;
         action: KitchenAction;
         metrics: MotionMetrics | null;
       }

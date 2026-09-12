@@ -434,27 +434,45 @@ label {
   filter: drop-shadow(0 5px 4px #0004);
 }
 .food-art {
+  position: relative;
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   font-size: clamp(45px, 5.8vw, 98px);
   line-height: 1;
   filter: drop-shadow(0 7px 5px #0004);
   pointer-events: none;
-  transition: transform 0.25s;
+  transition: opacity 0.18s;
 }
-.food-art.chopped {
-  transform: scale(0.85) rotate(-12deg);
-  filter: drop-shadow(16px 4px 0 #ba452b55);
-}
-.food-art.stretched {
-  transform: scaleX(1.3);
-}
-.hotspot-label {
+.dough-art img {
   position: absolute;
-  bottom: 1%;
-  font-size: 11px;
-  background: #fff8dcba;
-  border-radius: 5px;
-  padding: 2px 8px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform: none;
+  transition: opacity 0.4s ease;
+}
+.dough-art img.visible {
+  opacity: 1;
+}
+.target-food .food-art {
+  width: 78%;
+  height: 78%;
+  justify-self: center;
+  align-self: center;
+}
+.target-food[data-target="food-tomato"] .food-art,
+.target-food[data-target="food-sausage"] .food-art,
+.target-food[data-target="food-cheese"] .food-art {
+  transform: translateY(-18%);
+}
+.target-food[data-target="food-tomato"] .food-art {
+  width: 68%;
+  height: 68%;
+  transform: translateY(-24%);
 }
 .tool-away {
   font-size: 11px;
@@ -463,8 +481,19 @@ label {
   border-radius: 6px;
   padding: 4px 8px;
 }
-.target-board .food-art,
+.target-board .food-art {
+  width: 44%;
+  height: 80%;
+  justify-self: center;
+  align-self: center;
+  transform: translateY(-25%);
+  font-size: clamp(80px, 12vw, 200px);
+}
 .target-pass .food-art {
+  width: 48%;
+  height: 86%;
+  justify-self: center;
+  align-self: center;
   font-size: clamp(80px, 12vw, 200px);
 }
 .target-oven {
@@ -560,19 +589,24 @@ label {
 }
 .board-stain {
   position: absolute;
-  left: 39%;
-  top: 52%;
-  width: 16%;
-  height: 12%;
+  left: 32%;
+  top: 43%;
+  width: 34%;
+  height: 27%;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
   opacity: 0;
-  background: radial-gradient(ellipse, #ba49214a, transparent 70%);
+  background:
+    radial-gradient(ellipse at 35% 45%, #8f27199c 0 18%, transparent 47%),
+    radial-gradient(ellipse at 66% 56%, #a83c2094 0 20%, transparent 50%),
+    radial-gradient(ellipse at 49% 52%, #7f24147d 0 31%, transparent 68%);
+  filter: saturate(1.35) contrast(1.15);
+  mix-blend-mode: multiply;
   transform: rotate(-20deg);
   transition: opacity 0.5s;
 }
 .board-stain.dirty {
-  opacity: 1;
+  opacity: 0.92;
 }
 .oven-state {
   position: absolute;
@@ -607,9 +641,19 @@ label {
   object-fit: contain;
   transform: translate(-40%, -40%);
 }
+.carried > .tool-art-knife {
+  width: 165px;
+  height: 145px;
+  transform: translate(-38%, -42%);
+}
 .carried > .food-art {
+  width: 150px;
+  height: 150px;
   font-size: 88px;
   transform: translate(-40%, -40%);
+}
+.carried > .dough-art img {
+  transform: none;
 }
 .carried > span:not(.food-art) {
   font-size: 40px;
@@ -1100,10 +1144,6 @@ label {
   .oven-state {
     font-size: 9px;
     padding: 6px;
-  }
-  .hotspot-label {
-    font-size: 9px;
-    padding: 2px 4px;
   }
   .results,
   .guide {

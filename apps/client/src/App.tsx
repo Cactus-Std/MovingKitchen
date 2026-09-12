@@ -43,19 +43,56 @@ import { TomatoWash } from "./TomatoWash";
 import { EnrollmentProgress } from "./EnrollmentProgress";
 import { getGameControl } from "./gameControl";
 
+function foodSprite(item: Item): string | null {
+  if (!FOODS.includes(item.kind as (typeof FOODS)[number])) return null;
+  const stage =
+    item.kind === "tomato" || item.kind === "sausage" || item.kind === "cheese"
+        ? Math.min(5, Math.max(1, Math.round((item.cutProgress ?? 0) / 25) + 1))
+        : 1;
+  return `/assets/tools/${item.kind}${stage}.png`;
+}
+
+function DoughArt({ item }: { item: Item }) {
+  const activeStage = Math.min(
+    5,
+    Math.max(1, Math.round((item.stretchProgress ?? 0) / 25) + 1),
+  );
+  return (
+    <span className="food-art dough-art" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((stage) => (
+        <img
+          key={stage}
+          draggable={false}
+          src={`/assets/tools/dough${stage}.png`}
+          alt=""
+          className={stage === activeStage ? "visible" : ""}
+        />
+      ))}
+    </span>
+  );
+}
+
 function Art({ item }: { item: Item }) {
-  return toolImages[item.kind] ? (
+  const sprite = foodSprite(item);
+  return item.kind === "dough" ? (
+    <DoughArt item={item} />
+  ) : toolImages[item.kind] ? (
     <img
+      className={`tool-art tool-art-${item.kind}`}
       draggable={false}
       src={`/assets/tools/${toolImages[item.kind]}.png`}
       alt={labels[item.kind]}
     />
+  ) : sprite ? (
+    <img
+      className="food-art"
+      draggable={false}
+      src={sprite}
+      alt=""
+      aria-hidden="true"
+    />
   ) : (
-    <span
-      className={`food-art ${item.cutProgress === 100 ? "chopped" : ""} ${item.stretched ? "stretched" : ""}`}
-    >
-      {emoji[item.kind]}
-    </span>
+    <span className="food-art">{emoji[item.kind]}</span>
   );
 }
 export function App() {
@@ -258,7 +295,12 @@ export function App() {
         station,
         player: player?.name,
         held: held
-          ? { id: held.id, kind: held.kind, stretched: held.stretched }
+          ? {
+              id: held.id,
+              kind: held.kind,
+              stretchProgress: held.stretchProgress,
+              stretched: held.stretched,
+            }
           : null,
         control: canAct,
         identityAbsent: identity.absent,
@@ -594,11 +636,6 @@ export function App() {
                       (t.visual !== "tool" || t.item.location === "home") && (
                         <Art item={t.item} />
                       )}
-                    {t.visual === "food" && (
-                      <span className="hotspot-label">
-                        {t.item && labels[t.item.kind]}
-                      </span>
-                    )}
                     {t.visual === "tool" && t.item?.location !== "home" && (
                       <span className="tool-away">使用中</span>
                     )}
@@ -645,7 +682,9 @@ export function App() {
                       className={`board-stain ${k?.stations[station].dirty ? "dirty" : ""}`}
                     />
                     <div className="station-hint">
-                      {k?.stations[station].dirty
+                      {boardItem?.kind === "dough" && !boardItem.stretched
+                        ? `空手用双手展开面团 · ${boardItem.stretchProgress}%`
+                        : k?.stations[station].dirty
                         ? "案板有污渍 · 拿起抹布左右擦拭"
                         : "放上食材 → 拿刀上下切 → 归还菜刀 → 拿起食材"}
                     </div>
@@ -664,7 +703,7 @@ export function App() {
                     </div>
                     <div className="station-hint">
                       {held?.kind === "dough" && !held.stretched
-                        ? "双手靠近后向两侧展开面饼，再放入烤箱。"
+                        ? `重复双手展开面饼 ${held.stretchProgress}% · 完成后再放入烤箱。`
                         : "备齐四种食材自动烤制 · 烤好后有 15 秒取出时间"}
                     </div>
                   </>
@@ -724,7 +763,7 @@ export function App() {
                   </b>
                   <span>
                     {held
-                      ? `携带：${labels[held.kind]}${held.stretched ? " · 已展开" : ""}`
+                      ? `携带：${labels[held.kind]}${held.kind === "dough" ? ` · 展开 ${held.stretchProgress}%` : ""}`
                       : "空手"}
                   </span>
                 </div>

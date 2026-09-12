@@ -25,7 +25,7 @@
 | 番茄在水流下的可见表面 | WASH（48 个固定 patch，服务器合并去重）              |
 | 菜板上下切             | CHOP                                                 |
 | 抹布在空菜板左右移动   | WIPE                                                 |
-| 双手展开面饼           | STRETCH                                              |
+| 双手展开面饼（4 次）   | STRETCH，每次增加 25%                                |
 | 垃圾桶／烤箱悬停       | DISCARD、ADD_TO_OVEN、TAKE_PIZZA                     |
 | 持披萨刀在托盘上下切   | SLICE_PIZZA                                          |
 

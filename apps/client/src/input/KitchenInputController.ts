@@ -158,7 +158,7 @@ export class KitchenInputController {
       ...this.base(context, time, "debug"),
       type: "action",
       itemId: context.actionTarget!.itemId,
-      heldItemId: context.held!.id,
+      heldItemId: context.held?.id ?? null,
       action: context.actionTarget!.action,
       metrics: null,
     };
@@ -166,17 +166,18 @@ export class KitchenInputController {
   private canAct(context: InputContext): boolean {
     if (
       !context.playerId ||
-      !context.held ||
       !context.actionTarget?.allowed ||
       context.pending
     )
       return false;
-    if (context.held.kind === "tool")
+    if (context.actionTarget.action === "STRETCH")
+      return context.held === null;
+    if (context.held?.kind === "tool")
       return (
         context.held.homeSceneId === context.sceneId &&
         ACTIONS[context.held.tool] === context.actionTarget.action
       );
-    return ["STRETCH", "KNEAD", "SPRINKLE"].includes(
+    return !!context.held && ["KNEAD", "SPRINKLE"].includes(
       context.actionTarget.action,
     );
   }
@@ -331,7 +332,7 @@ export class KitchenInputController {
           ...this.base(context, frame.time, source),
           type: "action",
           itemId: context.actionTarget!.itemId,
-          heldItemId: context.held!.id,
+          heldItemId: context.held?.id ?? null,
           action: "STRETCH",
           metrics: source === "gesture" ? metrics : null,
         };

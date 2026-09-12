@@ -223,8 +223,13 @@ export function gameTargets(
       "工具正在使用中，或需要先空手。",
     );
   let actionTarget: ActionTarget | null = null;
-  if (held?.kind === "dough" && !held.stretched)
-    actionTarget = { itemId: held.id, action: "STRETCH", allowed: true };
+  if (!held && onBoard?.kind === "dough" && onBoard.stretchProgress < 100)
+    actionTarget = {
+      itemId: onBoard.id,
+      action: "STRETCH",
+      zoneId: "work",
+      allowed: true,
+    };
   else if (
     onBoard &&
     ((held?.kind === "knife" && onBoard.cutProgress < 100) ||

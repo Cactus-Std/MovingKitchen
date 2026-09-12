@@ -76,6 +76,7 @@ function newItem(kind: Item["kind"]): Item {
     cleanliness: kind === "tomato" ? 0 : 100,
     cutProgress: 0,
     hygiene: 100,
+    stretchProgress: 0,
     stretched: false,
     washedPatches: [],
   };
@@ -213,9 +214,12 @@ export function applyKitchenAction(
       else {
         check(board, "INVALID_STATION", "请把食材直接放进烤箱。");
         check(
-          held.kind === "tomato" || held.kind === "sausage",
+          held.kind === "tomato" ||
+            held.kind === "sausage" ||
+            held.kind === "cheese" ||
+            held.kind === "dough",
           "INVALID_ITEM_STATE",
-          "这里只有番茄和香肠需要切。",
+          "这里只能放置番茄、香肠、芝士或面团。",
         );
         check(
           held.kind !== "tomato" || held.cleanliness >= 92,
@@ -287,6 +291,7 @@ export function applyKitchenAction(
       check(
         item &&
           (item.kind === "sausage" ||
+            item.kind === "cheese" ||
             (item.kind === "tomato" && item.cleanliness >= 92)),
         "INVALID_ITEM_STATE",
         "请放入可以切的食材。",
@@ -299,8 +304,10 @@ export function applyKitchenAction(
       item.cutProgress = Math.min(100, item.cutProgress + 20);
       if (item.cutProgress === 100) {
         item.processState = "chopped";
-        area.dirty = true;
-        area.lastIngredient = item.kind as IngredientKind;
+        if (item.kind !== "cheese") {
+          area.dirty = true;
+          area.lastIngredient = item.kind as IngredientKind;
+        }
       }
       break;
     }
@@ -311,14 +318,19 @@ export function applyKitchenAction(
       area.dirty = false;
       area.lastIngredient = null;
       break;
-    case "STRETCH":
+    case "STRETCH": {
+      check(board, "INVALID_STATION", "请在菜板上展开面团。");
+      empty();
+      const dough = state.items[area.occupiedItemId ?? ""];
       check(
-        held?.kind === "dough" && !held.stretched,
+        dough?.kind === "dough" && dough.stretchProgress < 100,
         "INVALID_ITEM_STATE",
-        "请拿起尚未展开的面饼。",
+        "请把尚未展开的面团放到菜板上。",
       );
-      held.stretched = true;
+      dough.stretchProgress = Math.min(100, dough.stretchProgress + 25);
+      dough.stretched = dough.stretchProgress === 100;
       break;
+    }
     case "DISCARD":
       check(board, "INVALID_STATION", "垃圾桶在菜板工位。");
       check(held && isFood(held), "INVALID_ITEM_STATE", "只能丢弃食材。");
@@ -340,9 +352,10 @@ export function applyKitchenAction(
         (kind !== "tomato" ||
           (held.cleanliness >= 92 && held.cutProgress === 100)) &&
           (kind !== "sausage" || held.cutProgress === 100) &&
+          (kind !== "cheese" || held.cutProgress === 100) &&
           (kind !== "dough" || held.stretched),
         "INVALID_ITEM_STATE",
-        "番茄需洗净切碎，香肠需切碎，面饼需双手展开。",
+        "番茄需洗净切碎，香肠和芝士需切碎，面饼需双手展开。",
       );
       release(state, playerId, held, "oven");
       state.oven.ingredientItemIds[kind] = held.id;
