@@ -102,11 +102,41 @@ label {
   color: #fff9ec;
   background: #6e3d25;
 }
-.welcome-language {
+.welcome-controls {
   position: absolute;
   top: 24px;
   right: 28px;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.music-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid #c8b394;
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: #fff8e8cc;
+  color: #765437;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.music-toggle:hover:enabled {
+  transform: none;
+}
+.music-toggle.active {
+  color: #fff9ec;
+  background: #6e3d25;
+  border-color: #6e3d25;
+}
+.music-toggle-icon {
+  font-size: 15px;
+  line-height: 1;
 }
 .eyebrow {
   font-size: 11px;
@@ -261,6 +291,9 @@ label {
   font-size: 12px;
 }
 .topbar > .language-toggle {
+  flex: none;
+}
+.topbar > .music-toggle {
   flex: none;
 }
 .lobby {
@@ -1030,7 +1063,7 @@ label {
   .welcome-copy {
     margin-left: 6vw;
   }
-  .welcome-language {
+  .welcome-controls {
     top: 16px;
     right: 16px;
   }
@@ -1081,6 +1114,13 @@ label {
   .topbar > .text-button {
     font-size: 10px;
     padding: 2px;
+  }
+  .topbar > .music-toggle {
+    min-width: 32px;
+    padding: 5px 7px;
+  }
+  .topbar > .music-toggle .music-toggle-label {
+    display: none;
   }
   .game-hud {
     height: 75px;
