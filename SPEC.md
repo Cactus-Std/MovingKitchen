@@ -2,6 +2,8 @@
 
 > Multiplayer、玩家添加、人脸 enrollment/identity recognition、presence、Socket.IO interfaces、server authorization 与 Render deployment 的工程契约见 [`MULTIPLAYER_IDENTITY_INTEGRATION.md`](./MULTIPLAYER_IDENTITY_INTEGRATION.md)。玩法规则以本文为准；跨屏身份和网络实现以该接入文档为准。
 >
+> 旁观者身份、四工位监控墙、团队进度和实时活动 telemetry 的产品及工程规格见 [`SPECTATOR_MODE_SPEC.md`](./SPECTATOR_MODE_SPEC.md)。Phase 1 与 Phase 2 为确定实施范围；真实屏幕或摄像头直播仅为未来观察项。
+>
 > 本 repository 在 `reference/multiplayer-identification-prototype/` 保存并由 MovingKitchen Git 跟踪一份参考代码快照，可直接阅读已经验证的 client/server/vision 实现；该目录不携带原项目的 `.git` metadata。开发者也可另外 clone [Cactus-Std/multiplayer-identification](https://github.com/Cactus-Std/multiplayer-identification) 对照独立历史。该 reference 仅供迁移与比较，MovingKitchen 不应把它作为 runtime/workspace dependency。
 >
 > 当前游戏 UI、图片素材、场景标注坐标和鼠标玩法验证代码保存在 [`reference/web-ui-prototype/`](./reference/web-ui-prototype/)。它是可运行的体验参考，不是最终架构或网络实现；最终开发可按需要复用、重构或替换。
